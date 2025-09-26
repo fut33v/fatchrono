@@ -18,4 +18,8 @@ export class UpdateParticipantDto {
   @IsString()
   @IsOptional()
   team?: string | null;
+
+  @IsString()
+  @IsOptional()
+  birthDate?: string | null;
 }

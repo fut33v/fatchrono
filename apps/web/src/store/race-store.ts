@@ -11,6 +11,7 @@ export type RaceSummary = {
   id: string;
   name: string;
   totalLaps: number;
+  startedAt: number | null;
 };
 
 export type Rider = {
@@ -36,8 +37,6 @@ export type RaceStatePayload = {
   riders: Rider[];
   tapEvents: TapEvent[];
 };
-
-const MAX_TAP_HISTORY = 200;
 
 function sortTapEvents(events: TapEvent[]): TapEvent[] {
   return [...events].sort((a, b) => b.timestamp - a.timestamp);
@@ -74,7 +73,7 @@ export const useRaceStore = create<RaceStore>((set) => ({
       race,
       categories,
       riders,
-      tapEvents: sortTapEvents(tapEvents).slice(0, MAX_TAP_HISTORY),
+      tapEvents: sortTapEvents(tapEvents),
       isHydrated: true,
     });
   },
@@ -84,7 +83,7 @@ export const useRaceStore = create<RaceStore>((set) => ({
         return state;
       }
 
-      const next = sortTapEvents([event, ...state.tapEvents]).slice(0, MAX_TAP_HISTORY);
+      const next = sortTapEvents([event, ...state.tapEvents]);
       return { tapEvents: next };
     });
   },

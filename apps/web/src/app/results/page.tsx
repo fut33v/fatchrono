@@ -44,6 +44,7 @@ function formatGap(
 
 export default function ResultsPage() {
   const race = useRaceStore((state) => state.race);
+  const currentRaceId = useRaceStore((state) => state.currentRaceId);
   const categories = useRaceStore((state) => state.categories);
   const riders = useRaceStore((state) => state.riders);
   const tapEvents = useRaceStore((state) => state.tapEvents);
@@ -112,6 +113,17 @@ export default function ResultsPage() {
 
   const totalTapCount = tapEvents.length;
   const leader = rows[0];
+
+  if (!currentRaceId) {
+    return (
+      <div className="flex min-h-[calc(100vh-64px)] items-center justify-center bg-slate-950 px-4 text-slate-100">
+        <div className="max-w-md space-y-3 text-center text-sm text-slate-400">
+          <p>Ссылка на результаты должна содержать идентификатор гонки: `/results/&lt;id&gt;`.</p>
+          <p>Скопируйте её из админки или воспользуйтесь ссылкой, которой поделился организатор.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[calc(100vh-64px)] bg-slate-950 px-4 py-10 text-slate-100">

@@ -18,4 +18,8 @@ export class CreateParticipantDto {
   @IsString()
   @IsOptional()
   team?: string;
+
+  @IsString()
+  @IsOptional()
+  birthDate?: string;
 }

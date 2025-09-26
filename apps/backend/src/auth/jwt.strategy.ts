@@ -18,7 +18,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: { sub: string; telegramId: number; role: string }) {
-    const user = this.usersService.findByTelegramId(payload.telegramId);
+    const user = await this.usersService.findByTelegramId(payload.telegramId);
     if (!user) {
       throw new UnauthorizedException('Пользователь не найден');
     }

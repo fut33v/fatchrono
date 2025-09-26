@@ -31,7 +31,7 @@ export class AuthService {
     this.verifySignature(payload);
     this.ensureAuthDateIsFresh(payload);
 
-    const user = this.usersService.upsertFromTelegram({
+    const user = await this.usersService.upsertFromTelegram({
       telegramId: payload.id,
       username: payload.username,
       firstName: payload.first_name,

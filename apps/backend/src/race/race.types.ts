@@ -11,6 +11,7 @@ export type Participant = {
   name: string;
   categoryId?: string;
   team?: string;
+  birthDate?: number | null;
 };
 
 export type Rider = {
@@ -38,6 +39,7 @@ export type Race = {
   updatedAt: number;
   categories: Category[];
   participants: Participant[];
+  startedAt: number | null;
 };
 
 export type RaceStatePayload = {
@@ -45,6 +47,7 @@ export type RaceStatePayload = {
     id: string;
     name: string;
     totalLaps: number;
+    startedAt: number | null;
   } | null;
   categories: Category[];
   riders: Rider[];
@@ -54,13 +57,16 @@ export type RaceStatePayload = {
 export type RaceBroadcastEvent =
   | {
       type: "tap-recorded";
+      raceId: string;
       payload: TapEvent;
     }
   | {
       type: "tap-cancelled";
+      raceId: string;
       payload: { eventId: string };
     }
   | {
       type: "race-updated";
+      raceId: string;
       payload: RaceStatePayload;
     };

@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { AuthProvider } from "@/components/auth-provider";
 import { RaceSync } from "@/components/race-sync";
 import { SiteHeader } from "@/components/site-header";
-import { useRaceIdFromPath } from "@/app/(shared)/hooks/use-race-id";
+import { RacePathWatcher } from "@/components/race-path-watcher";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -31,9 +31,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ru">
+    <html
+      lang="ru"
+      className={`${geistSans.variable} ${geistMono.variable}`}
+      suppressHydrationWarning
+    >
       <body
         className={`${geistSans.variable} ${geistMono.variable} min-h-screen antialiased`}
+        suppressHydrationWarning
       >
         <AuthProvider />
         <RaceSync />
@@ -45,9 +50,4 @@ export default function RootLayout({
       </body>
     </html>
   );
-}
-
-function RacePathWatcher() {
-  useRaceIdFromPath();
-  return null;
 }

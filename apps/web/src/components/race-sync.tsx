@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { io, Socket } from "socket.io-client";
 import { API_BASE_URL, SOCKET_URL } from "@/lib/config";
 import { useRaceStore, type RaceStatePayload, type TapEvent } from "@/store/race-store";
@@ -16,15 +16,24 @@ export function RaceSync() {
   const setError = useRaceStore((state) => state.setError);
   const currentRaceId = useRaceStore((state) => state.currentRaceId);
 
+  const currentRaceRef = useRef<string | undefined>(currentRaceId);
+
+  useEffect(() => {
+    currentRaceRef.current = currentRaceId;
+  }, [currentRaceId]);
+
   useEffect(() => {
     let isMounted = true;
 
     async function bootstrap() {
       try {
-        const targetUrl = currentRaceId
-          ? `${API_BASE_URL}/race/${currentRaceId}/state`
-          : `${API_BASE_URL}/race/state`;
-        const response = await fetch(targetUrl, {
+        if (!currentRaceId) {
+          setInitialState({ race: null, categories: [], riders: [], tapEvents: [] });
+          setError(undefined);
+          return;
+        }
+
+        const response = await fetch(`${API_BASE_URL}/race/${currentRaceId}/state`, {
           cache: "no-store",
         });
         if (!response.ok) {
@@ -67,17 +76,35 @@ export function RaceSync() {
         setError("Проблема с подключением к серверу результатов");
       });
 
-      socket.on("race:state", (payload: RaceStatePayload) => {
-        setInitialState(payload);
-      });
+      socket.on(
+        "race:state",
+        (payload: { raceId: string; state: RaceStatePayload }) => {
+          if (payload.raceId !== currentRaceRef.current) {
+            return;
+          }
+          setInitialState(payload.state);
+        },
+      );
 
-      socket.on("race:tap-recorded", (event: TapEvent) => {
-        upsertTapEvent(event);
-      });
+      socket.on(
+        "race:tap-recorded",
+        (data: { raceId: string; event: TapEvent }) => {
+          if (data.raceId !== currentRaceRef.current) {
+            return;
+          }
+          upsertTapEvent(data.event);
+        },
+      );
 
-      socket.on("race:tap-cancelled", (payload: { eventId: string }) => {
-        removeTapEvent(payload.eventId);
-      });
+      socket.on(
+        "race:tap-cancelled",
+        (payload: { raceId: string; eventId: string }) => {
+          if (payload.raceId !== currentRaceRef.current) {
+            return;
+          }
+          removeTapEvent(payload.eventId);
+        },
+      );
     } else {
       setConnectionStatus(socket.connected);
     }

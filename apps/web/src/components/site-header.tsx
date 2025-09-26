@@ -3,18 +3,57 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuthStore } from "@/store/auth-store";
+import { useRaceStore } from "@/store/race-store";
 
-const links = [
-  { href: "/", label: "Главная" },
-  { href: "/results", label: "Результаты" },
-  { href: "/chrono", label: "Хронометраж" },
-  { href: "/leaderboard", label: "Лидер" },
-  { href: "/admin", label: "Админ" },
-];
+type NavItem = {
+  key: string;
+  href: string;
+  label: string;
+  isActive: boolean;
+};
 
 export function SiteHeader() {
   const pathname = usePathname();
   const user = useAuthStore((state) => state.user);
+  const currentRaceId = useRaceStore((state) => state.currentRaceId);
+
+  const navItems: NavItem[] = [];
+
+  navItems.push({ key: "home", href: "/", label: "Главная", isActive: pathname === "/" });
+
+  if (currentRaceId) {
+    navItems.push({
+      key: "results",
+      href: `/results/${currentRaceId}`,
+      label: "Результаты",
+      isActive: pathname.startsWith("/results/"),
+    });
+
+    if (user?.role === "admin") {
+      navItems.push({
+        key: "chrono",
+        href: `/chrono/${currentRaceId}`,
+        label: "Хронометраж",
+        isActive: pathname.startsWith("/chrono/"),
+      });
+    }
+
+    navItems.push({
+      key: "leaderboard",
+      href: `/leaderboard/${currentRaceId}`,
+      label: "Лидер",
+      isActive: pathname.startsWith("/leaderboard/"),
+    });
+  }
+
+  if (user?.role === "admin") {
+    navItems.push({
+      key: "admin",
+      href: "/admin",
+      label: "Админ",
+      isActive: pathname.startsWith("/admin"),
+    });
+  }
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-800/60 bg-slate-950/85 backdrop-blur">
@@ -23,28 +62,19 @@ export function SiteHeader() {
           FatChrono
         </Link>
         <nav className="flex flex-wrap items-center gap-3 text-sm text-slate-400">
-          {links.map((link) => {
-            const isActive = pathname === link.href || pathname.startsWith(`${link.href}/`);
-            if (link.href === "/admin" && user?.role !== "admin") {
-              return null;
-            }
-            if (link.href === "/chrono" && user?.role !== "admin") {
-              return null;
-            }
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`rounded-lg px-3 py-1.5 transition ${
-                  isActive
-                    ? "bg-teal-500/10 text-teal-200"
-                    : "hover:bg-slate-800/70 hover:text-slate-200"
-                }`}
-              >
-                {link.label}
-              </Link>
-            );
-          })}
+          {navItems.map((item) => (
+            <Link
+              key={item.key}
+              href={item.href}
+              className={`rounded-lg px-3 py-1.5 transition ${
+                item.isActive
+                  ? "bg-teal-500/10 text-teal-200"
+                  : "hover:bg-slate-800/70 hover:text-slate-200"
+              }`}
+            >
+              {item.label}
+            </Link>
+          ))}
         </nav>
       </div>
     </header>

@@ -32,9 +32,7 @@ export class RaceGateway implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  handleConnection(client: Socket) {
-    client.emit('race:state', this.raceService.getState());
-  }
+  handleConnection(_client: Socket) {}
 
   private forwardEvent(event: RaceBroadcastEvent) {
     if (!this.server) {
@@ -42,15 +40,24 @@ export class RaceGateway implements OnModuleInit, OnModuleDestroy {
     }
 
     if (event.type === 'tap-recorded') {
-      this.server.emit('race:tap-recorded', event.payload);
+      this.server.emit('race:tap-recorded', {
+        raceId: event.raceId,
+        event: event.payload,
+      });
     }
 
     if (event.type === 'tap-cancelled') {
-      this.server.emit('race:tap-cancelled', event.payload);
+      this.server.emit('race:tap-cancelled', {
+        raceId: event.raceId,
+        eventId: event.payload.eventId,
+      });
     }
 
     if (event.type === 'race-updated') {
-      this.server.emit('race:state', event.payload);
+      this.server.emit('race:state', {
+        raceId: event.raceId,
+        state: event.payload,
+      });
     }
   }
 }

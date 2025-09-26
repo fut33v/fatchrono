@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TapSource {
+  manual
+  system
+}
+
+enum UserRole {
+  admin
+  staff
+  viewer
+}
+
+model Race {
+  id            String        @id @default(uuid())
+  name          String
+  totalLaps     Int
+  startedAt     DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  categories    Category[]
+  participants  Participant[]
+  tapEvents     TapEvent[]
+}
+
+model Category {
+  id          String        @id @default(uuid())
+  raceId      String
+  race        Race          @relation(fields: [raceId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  order       Int           @default(0)
+  participants Participant[]
+  tapEvents   TapEvent[]
+}
+
+model Participant {
+  id          String     @id @default(uuid())
+  raceId      String
+  race        Race       @relation(fields: [raceId], references: [id], onDelete: Cascade)
+  bib         Int
+  name        String
+  categoryId  String?
+  category    Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  team        String?
+  birthDate   DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  tapEvents   TapEvent[]
+
+  @@unique([raceId, bib])
+}
+
+model TapEvent {
+  id             String      @id @default(uuid())
+  raceId         String
+  race           Race        @relation(fields: [raceId], references: [id], onDelete: Cascade)
+  participantId  String?
+  participant    Participant? @relation(fields: [participantId], references: [id], onDelete: SetNull)
+  categoryId     String?
+  category       Category?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  categoryName   String
+  bib            Int
+  name           String
+  source         TapSource   @default(manual)
+  timestamp      DateTime    @default(now())
+  createdAt      DateTime    @default(now())
+}
+
+model User {
+  id          String   @id @default(uuid())
+  telegramId  Int      @unique
+  username    String?
+  firstName   String?
+  lastName    String?
+  photoUrl    String?
+  role        UserRole @default(viewer)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
