@@ -21,6 +21,7 @@ import {
 type CreateRaceOptions = {
   name: string;
   totalLaps: number;
+  tapCooldownSeconds?: number;
 };
 
 type CreateCategoryOptions = {
@@ -74,6 +75,7 @@ export class RaceService {
       id: string;
       name: string;
       totalLaps: number;
+      tapCooldownSeconds: number;
       startedAt: number | null;
       createdAt: number;
       participants: number;
@@ -86,6 +88,7 @@ export class RaceService {
         id: true,
         name: true,
         totalLaps: true,
+        tapCooldownSeconds: true,
         startedAt: true,
         createdAt: true,
         participants: { select: { id: true } },
@@ -97,6 +100,7 @@ export class RaceService {
       id: race.id,
       name: race.name,
       totalLaps: race.totalLaps,
+      tapCooldownSeconds: race.tapCooldownSeconds,
       startedAt: race.startedAt ? race.startedAt.getTime() : null,
       createdAt: race.createdAt.getTime(),
       participants: race.participants.length,
@@ -106,7 +110,7 @@ export class RaceService {
 
   async updateRace(
     raceId: string,
-    options: { name?: string; totalLaps?: number },
+    options: { name?: string; totalLaps?: number; tapCooldownSeconds?: number },
   ): Promise<Race> {
     const race = await this.prisma.race.findUnique({
       where: { id: raceId },
@@ -123,6 +127,7 @@ export class RaceService {
     const data: {
       name?: string;
       totalLaps?: number;
+      tapCooldownSeconds?: number;
     } = {};
 
     if (options.name !== undefined) {
@@ -138,6 +143,13 @@ export class RaceService {
         throw new BadRequestException('Количество кругов должно быть больше нуля');
       }
       data.totalLaps = Math.trunc(options.totalLaps);
+    }
+
+    if (options.tapCooldownSeconds !== undefined) {
+      if (!Number.isFinite(options.tapCooldownSeconds) || options.tapCooldownSeconds < 0) {
+        throw new BadRequestException('Кулдаун отметок должен быть неотрицательным');
+      }
+      data.tapCooldownSeconds = Math.trunc(options.tapCooldownSeconds);
     }
 
     if (Object.keys(data).length === 0) {
@@ -189,6 +201,7 @@ export class RaceService {
         id: race.id,
         name: race.name,
         totalLaps: race.totalLaps,
+        tapCooldownSeconds: race.tapCooldownSeconds,
         startedAt: race.startedAt ? race.startedAt.getTime() : null,
       },
       categories,
@@ -242,10 +255,16 @@ export class RaceService {
       throw new BadRequestException('Количество кругов должно быть больше нуля');
     }
 
+    const tapCooldownSeconds = options.tapCooldownSeconds ?? 0;
+    if (!Number.isFinite(tapCooldownSeconds) || tapCooldownSeconds < 0) {
+      throw new BadRequestException('Кулдаун отметок должен быть неотрицательным');
+    }
+
     const race = await this.prisma.race.create({
       data: {
         name: options.name.trim(),
         totalLaps: Math.trunc(options.totalLaps),
+        tapCooldownSeconds: Math.trunc(tapCooldownSeconds),
       },
       include: {
         categories: true,
@@ -461,6 +480,29 @@ export class RaceService {
     return {
       removed: participants.map((participant) => this.toParticipant(participant)),
     };
+  }
+
+  async deleteRace(raceId: string): Promise<void> {
+    const race = await this.prisma.race.findUnique({
+      where: { id: raceId },
+    });
+
+    if (!race) {
+      throw new NotFoundException('Гонка не найдена');
+    }
+
+    await this.prisma.race.delete({ where: { id: raceId } });
+
+    this.emit({
+      type: 'race-updated',
+      raceId,
+      payload: {
+        race: null,
+        categories: [],
+        riders: [],
+        tapEvents: [],
+      },
+    });
   }
 
   async importParticipantsFromXlsx(
@@ -846,6 +888,7 @@ export class RaceService {
     id: string;
     name: string;
     totalLaps: number;
+    tapCooldownSeconds: number;
     createdAt: Date;
     updatedAt: Date;
     startedAt: Date | null;
@@ -871,6 +914,7 @@ export class RaceService {
       id: race.id,
       name: race.name,
       totalLaps: race.totalLaps,
+      tapCooldownSeconds: race.tapCooldownSeconds,
       createdAt: race.createdAt.getTime(),
       updatedAt: race.updatedAt.getTime(),
       startedAt: race.startedAt ? race.startedAt.getTime() : null,

@@ -1,4 +1,4 @@
-import { IsInt, IsOptional, IsPositive, IsString, MaxLength } from 'class-validator';
+import { IsInt, IsOptional, IsPositive, IsString, MaxLength, Min } from 'class-validator';
 
 export class UpdateRaceDto {
   @IsOptional()
@@ -10,4 +10,9 @@ export class UpdateRaceDto {
   @IsInt()
   @IsPositive()
   totalLaps?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  tapCooldownSeconds?: number;
 }

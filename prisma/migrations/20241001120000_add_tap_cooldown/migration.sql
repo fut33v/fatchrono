@@ -1,0 +1,1 @@
+ALTER TABLE "Race" ADD COLUMN "tapCooldownSeconds" INTEGER NOT NULL DEFAULT 0;

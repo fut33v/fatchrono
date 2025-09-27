@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -34,6 +34,31 @@ export default function ManualChronoPage() {
   const [localFeedback, setLocalFeedback] = useState<string>();
   const [now, setNow] = useState(() => Date.now());
   const [pendingCancelIds, setPendingCancelIds] = useState<string[]>([]);
+  const lastTapAttemptRef = useRef<Map<number, number>>(new Map());
+
+  const lastTapByBib = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const tap of tapEvents) {
+      const current = map.get(tap.bib) ?? 0;
+      if (tap.timestamp > current) {
+        map.set(tap.bib, tap.timestamp);
+      }
+    }
+    return map;
+  }, [tapEvents]);
+
+  useEffect(() => {
+    if (lastTapAttemptRef.current.size === 0) {
+      return;
+    }
+
+    for (const [bib, attemptTs] of lastTapAttemptRef.current) {
+      const latest = lastTapByBib.get(bib) ?? 0;
+      if (latest >= attemptTs) {
+        lastTapAttemptRef.current.delete(bib);
+      }
+    }
+  }, [lastTapByBib]);
 
   const filteredRiders = useMemo(() => {
     const ordered = [...riders].sort((a, b) => a.bib - b.bib);
@@ -103,7 +128,37 @@ export default function ManualChronoPage() {
       return;
     }
 
+    const cooldownSeconds = race?.tapCooldownSeconds ?? 0;
+    if (cooldownSeconds > 0) {
+      const lastRecorded = lastTapByBib.get(bib) ?? 0;
+      const lastAttempt = lastTapAttemptRef.current.get(bib) ?? 0;
+      const lastTimestamp = Math.max(lastRecorded, lastAttempt);
+
+      if (lastTimestamp > 0) {
+        const diffMs = Date.now() - lastTimestamp;
+        if (diffMs < cooldownSeconds * 1000) {
+          const secondsAgoLabel = diffMs < 1000
+            ? "менее секунды"
+            : `${Math.floor(diffMs / 1000)} сек`;
+          const remainingSeconds = Math.max(
+            0,
+            Math.ceil((cooldownSeconds * 1000 - diffMs) / 1000),
+          );
+          const confirmMessage = `Гонщик #${bib} уже был отмечен ${secondsAgoLabel} назад. Повторить отметку${
+            remainingSeconds > 0 ? ` (кулдаун ${remainingSeconds} сек)` : ""
+          }?`;
+
+          if (!window.confirm(confirmMessage)) {
+            return;
+          }
+        }
+      }
+    }
+
+    const previousAttempt = lastTapAttemptRef.current.get(bib);
     try {
+      setError(undefined);
+      lastTapAttemptRef.current.set(bib, Date.now());
       const response = await fetch(`${API_BASE_URL}/race/${currentRaceId}/taps`, {
         method: "POST",
         headers: {
@@ -121,6 +176,11 @@ export default function ManualChronoPage() {
       upsertTapEvent(event);
       setError(undefined);
     } catch (err) {
+      if (previousAttempt === undefined) {
+        lastTapAttemptRef.current.delete(bib);
+      } else {
+        lastTapAttemptRef.current.set(bib, previousAttempt);
+      }
       console.error("Не удалось отправить отметку", err);
       setError("Не удалось отправить отметку. Проверьте соединение.");
     }

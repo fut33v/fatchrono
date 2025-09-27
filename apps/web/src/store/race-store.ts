@@ -11,6 +11,7 @@ export type RaceSummary = {
   id: string;
   name: string;
   totalLaps: number;
+  tapCooldownSeconds: number;
   startedAt: number | null;
 };
 

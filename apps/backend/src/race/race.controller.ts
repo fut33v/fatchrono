@@ -213,4 +213,12 @@ export class RaceController {
     await this.raceService.cancelTap(raceId, eventId);
     return { eventId };
   }
+
+  @Delete(':raceId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  async deleteRace(@Param('raceId') raceId: string) {
+    await this.raceService.deleteRace(raceId);
+    return { raceId };
+  }
 }

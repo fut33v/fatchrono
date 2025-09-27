@@ -35,6 +35,7 @@ export type Race = {
   id: string;
   name: string;
   totalLaps: number;
+  tapCooldownSeconds: number;
   createdAt: number;
   updatedAt: number;
   categories: Category[];
@@ -47,6 +48,7 @@ export type RaceStatePayload = {
     id: string;
     name: string;
     totalLaps: number;
+    tapCooldownSeconds: number;
     startedAt: number | null;
   } | null;
   categories: Category[];

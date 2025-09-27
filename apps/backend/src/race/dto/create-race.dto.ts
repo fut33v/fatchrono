@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsNotEmpty, IsString, Min } from 'class-validator';
+import { IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator';
 
 export class CreateRaceDto {
   @IsString()
@@ -10,4 +10,10 @@ export class CreateRaceDto {
   @IsInt()
   @Min(1)
   totalLaps!: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  tapCooldownSeconds?: number;
 }
