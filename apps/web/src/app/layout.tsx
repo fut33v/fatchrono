@@ -18,11 +18,11 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "FatChrono",
-    template: "%s — FatChrono",
+    default: "ФАТРЭЙСИНГ ХРОНО",
+    template: "%s — ФАТРЭЙСИНГ ХРОНО",
   },
   description:
-    "Платформа хронометража велогонок с авторизацией через Telegram и живыми результатами.",
+    "ФАТРЭЙСИНГ ХРОНО — платформа хронометража велогонок с авторизацией через Telegram и живыми результатами.",
 };
 
 export default function RootLayout({

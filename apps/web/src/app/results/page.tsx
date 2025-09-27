@@ -13,6 +13,11 @@ type ResultRow = {
   gap: string;
 };
 
+type PodiumGroup = {
+  category: string;
+  riders: ResultRow[];
+};
+
 function formatGap(
   leader: ResultRow | undefined,
   row: ResultRow,
@@ -42,6 +47,26 @@ function formatGap(
   return `+${formatted}с`;
 }
 
+function compareResults(a: ResultRow, b: ResultRow): number {
+  if (b.laps !== a.laps) {
+    return b.laps - a.laps;
+  }
+
+  if (a.lastTap === b.lastTap) {
+    return a.bib - b.bib;
+  }
+
+  if (a.lastTap === null) {
+    return 1;
+  }
+
+  if (b.lastTap === null) {
+    return -1;
+  }
+
+  return a.lastTap - b.lastTap;
+}
+
 export default function ResultsPage() {
   const race = useRaceStore((state) => state.race);
   const currentRaceId = useRaceStore((state) => state.currentRaceId);
@@ -52,7 +77,10 @@ export default function ResultsPage() {
   const isConnected = useRaceStore((state) => state.isConnected);
   const error = useRaceStore((state) => state.error);
 
-  const rows = useMemo<ResultRow[]>(() => {
+  const { rows, podium } = useMemo<{
+    rows: ResultRow[];
+    podium: PodiumGroup[];
+  }>(() => {
     const lapCounts = new Map<
       number,
       { laps: number; lastTap: number | null }
@@ -82,34 +110,50 @@ export default function ResultsPage() {
       } satisfies ResultRow;
     });
 
-    mapped.sort((a, b) => {
-      if (b.laps !== a.laps) {
-        return b.laps - a.laps;
-      }
-
-      if (a.lastTap === b.lastTap) {
-        return a.bib - b.bib;
-      }
-
-      if (a.lastTap === null) {
-        return 1;
-      }
-
-      if (b.lastTap === null) {
-        return -1;
-      }
-
-      return a.lastTap - b.lastTap;
-    });
+    mapped.sort(compareResults);
 
     const leader = mapped[0];
-
-    return mapped.map((row, index) => ({
+    const ranked = mapped.map((row, index) => ({
       ...row,
       position: index + 1,
       gap: formatGap(leader, row),
     }));
-  }, [riders, tapEvents]);
+
+    const categoryOrder = categories.map((category) => category.name);
+    const grouped = new Map<string, ResultRow[]>();
+
+    for (const row of ranked) {
+      const key = row.category || "Без категории";
+      const bucket = grouped.get(key) ?? [];
+      bucket.push(row);
+      grouped.set(key, bucket);
+    }
+
+    const knownCategories = new Set(categoryOrder);
+    const extraCategories = Array.from(grouped.keys()).filter(
+      (name) => !knownCategories.has(name),
+    );
+    const orderedNames = [
+      ...categoryOrder,
+      ...extraCategories.sort((a, b) => a.localeCompare(b, "ru")),
+    ];
+
+    const podiumGroups: PodiumGroup[] = orderedNames
+      .filter((name) => grouped.has(name))
+      .map((name) => ({
+        category: name,
+        riders: grouped.get(name)!
+          .slice()
+          .sort(compareResults)
+          .slice(0, 3),
+      }))
+      .filter((group) => group.riders.length > 0);
+
+    return {
+      rows: ranked,
+      podium: podiumGroups,
+    };
+  }, [riders, tapEvents, categories]);
 
   const totalTapCount = tapEvents.length;
   const leader = rows[0];
@@ -196,6 +240,49 @@ export default function ResultsPage() {
             </tbody>
           </table>
         </section>
+
+        {podium.length > 0 && (leader?.laps ?? 0) > 0 && (
+          <section className="space-y-4">
+            <div className="text-sm font-semibold text-slate-200">
+              Подиумы по категориям
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              {podium.map((group) => (
+                <div
+                  key={group.category}
+                  className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/50 shadow"
+                >
+                  <div className="bg-slate-900/70 px-4 py-3 text-sm font-semibold text-slate-200">
+                    {group.category}
+                  </div>
+                  <table className="w-full text-left text-sm">
+                    <thead className="text-xs uppercase tracking-wide text-slate-400">
+                      <tr>
+                        <th className="px-4 py-2">Место</th>
+                        <th className="px-4 py-2">Номер</th>
+                        <th className="px-4 py-2">Гонщик</th>
+                        <th className="px-4 py-2">Круги</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {group.riders.map((rider, index) => (
+                        <tr
+                          key={rider.bib}
+                          className="border-t border-slate-800/60 text-slate-100"
+                        >
+                          <td className="px-4 py-2 font-semibold">{index + 1}</td>
+                          <td className="px-4 py-2 text-slate-300">#{rider.bib}</td>
+                          <td className="px-4 py-2">{rider.name}</td>
+                          <td className="px-4 py-2">{rider.laps}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {totalTapCount === 0 && (
           <section className="rounded-2xl border border-dashed border-slate-800 bg-slate-900/40 p-6 text-sm text-slate-400">
