@@ -45,6 +45,7 @@ type ParticipantRow = Participant & {
 
 type AdminRace = {
   id: string;
+  slug: string | null;
   name: string;
   totalLaps: number;
   tapCooldownSeconds: number;
@@ -57,6 +58,15 @@ type AdminRace = {
 type RacesResponse = {
   races: AdminRace[];
 };
+
+const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+});
+
+function formatDate(timestamp: number) {
+  return dateFormatter.format(new Date(timestamp));
+}
 
 export default function AdminPage() {
   const router = useRouter();
@@ -72,13 +82,13 @@ export default function AdminPage() {
   const [feedback, setFeedback] = useState<string | undefined>();
   const [error, setError] = useState<string | undefined>();
 
-  const [raceForm, setRaceForm] = useState({ name: "", totalLaps: 20, tapCooldownSeconds: 0 });
+  const [raceForm, setRaceForm] = useState({ name: "", slug: "", totalLaps: 20, tapCooldownSeconds: 0 });
   const [isCreatingRace, setIsCreatingRace] = useState(false);
 
   const [categoryForm, setCategoryForm] = useState({ name: "", description: "" });
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [categoryDrafts, setCategoryDrafts] = useState<Record<string, { name: string; description: string }>>({});
-  const [raceDrafts, setRaceDrafts] = useState<Record<string, { name: string; totalLaps: string; tapCooldownSeconds: string }>>({});
+  const [raceDrafts, setRaceDrafts] = useState<Record<string, { name: string; slug: string; totalLaps: string; tapCooldownSeconds: string }>>({});
   const [raceSavingId, setRaceSavingId] = useState<string | null>(null);
   const [raceDeletingId, setRaceDeletingId] = useState<string | null>(null);
   const [categorySavingId, setCategorySavingId] = useState<string | null>(null);
@@ -109,10 +119,11 @@ export default function AdminPage() {
   );
 
   useEffect(() => {
-    const drafts: Record<string, { name: string; totalLaps: string; tapCooldownSeconds: string }> = {};
+    const drafts: Record<string, { name: string; slug: string; totalLaps: string; tapCooldownSeconds: string }> = {};
     for (const race of races) {
       drafts[race.id] = {
         name: race.name,
+        slug: race.slug ?? "",
         totalLaps: race.totalLaps.toString(),
         tapCooldownSeconds: String(race.tapCooldownSeconds ?? 0),
       };
@@ -509,12 +520,13 @@ export default function AdminPage() {
 
   function handleRaceDraftChange(
     raceId: string,
-    field: 'name' | 'totalLaps' | 'tapCooldownSeconds',
+    field: 'name' | 'slug' | 'totalLaps' | 'tapCooldownSeconds',
     value: string,
   ) {
     setRaceDrafts((prev) => {
       const existing = prev[raceId] ?? {
         name: races.find((race) => race.id === raceId)?.name ?? '',
+        slug: races.find((race) => race.id === raceId)?.slug ?? '',
         totalLaps: races.find((race) => race.id === raceId)?.totalLaps.toString() ?? '',
         tapCooldownSeconds: String(
           (races.find((race) => race.id === raceId)?.tapCooldownSeconds) ?? 0,
@@ -547,6 +559,7 @@ export default function AdminPage() {
         ...prev,
         [raceId]: {
           ...(prev[raceId] ?? {
+            slug: race.slug ?? '',
             totalLaps: race.totalLaps.toString(),
             tapCooldownSeconds: String(race.tapCooldownSeconds ?? 0),
           }),
@@ -572,7 +585,11 @@ export default function AdminPage() {
       setRaceDrafts((prev) => ({
         ...prev,
         [raceId]: {
-          ...(prev[raceId] ?? { totalLaps: race.totalLaps.toString() }),
+          ...(prev[raceId] ?? {
+            slug: race.slug ?? '',
+            totalLaps: race.totalLaps.toString(),
+            tapCooldownSeconds: String(race.tapCooldownSeconds ?? 0),
+          }),
           name: race.name,
         },
       }));
@@ -595,6 +612,7 @@ export default function AdminPage() {
         [raceId]: {
           ...(prev[raceId] ?? {
             name: race.name,
+            slug: race.slug ?? '',
             tapCooldownSeconds: String(race.tapCooldownSeconds ?? 0),
           }),
           totalLaps: race.totalLaps.toString(),
@@ -625,9 +643,52 @@ export default function AdminPage() {
         [raceId]: {
           ...(prev[raceId] ?? {
             name: race.name,
+            slug: race.slug ?? '',
             tapCooldownSeconds: String(race.tapCooldownSeconds ?? 0),
           }),
           totalLaps: race.totalLaps.toString(),
+        },
+      }));
+    } finally {
+      setRaceSavingId(null);
+    }
+  }
+
+  async function handleUpdateRaceSlug(raceId: string, rawSlug: string) {
+    const race = races.find((item) => item.id === raceId);
+    if (!race) {
+      return;
+    }
+
+    const trimmed = rawSlug.trim();
+    const currentSlug = race.slug ?? '';
+
+    if (trimmed === currentSlug) {
+      return;
+    }
+
+    try {
+      setRaceSavingId(raceId);
+      setFeedback(undefined);
+      setError(undefined);
+      await authFetch(`/race/${raceId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ slug: trimmed }),
+      });
+      setFeedback(trimmed ? 'Адрес гонки обновлён' : 'Адрес гонки сброшен');
+      await fetchRaces();
+    } catch (err) {
+      console.error('Не удалось обновить адрес гонки', err);
+      setError('Не удалось обновить адрес гонки');
+      setRaceDrafts((prev) => ({
+        ...prev,
+        [raceId]: {
+          ...(prev[raceId] ?? {
+            name: race.name,
+            totalLaps: race.totalLaps.toString(),
+            tapCooldownSeconds: String(race.tapCooldownSeconds ?? 0),
+          }),
+          slug: currentSlug,
         },
       }));
     } finally {
@@ -652,6 +713,7 @@ export default function AdminPage() {
         [raceId]: {
           ...(prev[raceId] ?? {
             name: race.name,
+            slug: race.slug ?? '',
             totalLaps: race.totalLaps.toString(),
             tapCooldownSeconds: String(race.tapCooldownSeconds ?? 0),
           }),
@@ -669,6 +731,7 @@ export default function AdminPage() {
         [raceId]: {
           ...(prev[raceId] ?? {
             name: race.name,
+            slug: race.slug ?? '',
             totalLaps: race.totalLaps.toString(),
             tapCooldownSeconds: String(race.tapCooldownSeconds ?? 0),
           }),
@@ -700,6 +763,7 @@ export default function AdminPage() {
         [raceId]: {
           ...(prev[raceId] ?? {
             name: race.name,
+            slug: race.slug ?? '',
             totalLaps: race.totalLaps.toString(),
             tapCooldownSeconds: String(race.tapCooldownSeconds ?? 0),
           }),
@@ -720,11 +784,12 @@ export default function AdminPage() {
         method: 'POST',
         body: JSON.stringify({
           name: raceForm.name,
+          slug: raceForm.slug,
           totalLaps: Number(raceForm.totalLaps),
           tapCooldownSeconds: Number(raceForm.tapCooldownSeconds),
         }),
       });
-      setRaceForm({ name: '', totalLaps: 20, tapCooldownSeconds: 0 });
+      setRaceForm({ name: '', slug: '', totalLaps: 20, tapCooldownSeconds: 0 });
       setFeedback('Гонка создана');
       await fetchRaces();
     } catch (err) {
@@ -925,10 +990,12 @@ export default function AdminPage() {
         {races.map((race) => {
           const draft = raceDrafts[race.id] ?? {
             name: race.name,
+            slug: race.slug ?? '',
             totalLaps: race.totalLaps.toString(),
             tapCooldownSeconds: String(race.tapCooldownSeconds ?? 0),
           };
           const isSaving = raceSavingId === race.id;
+          const pathSegment = race.slug ?? race.id;
           const activeClasses = race.id === activeRaceId
             ? "border-teal-400/70 bg-teal-500/10 text-teal-200"
             : "border-slate-700 bg-slate-900 text-slate-300 hover:border-teal-400/50 hover:text-teal-200";
@@ -937,9 +1004,70 @@ export default function AdminPage() {
           return (
             <li
               key={race.id}
-              className="flex flex-col gap-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:flex-row sm:items-start sm:justify-between"
+              className="flex flex-col gap-6 rounded-2xl border border-slate-800 bg-slate-900/60 p-4"
             >
-              <div className="space-y-3">
+              <div className="flex flex-1 flex-col gap-4">
+                <Link
+                  href={`/results/${encodeURIComponent(pathSegment)}`}
+                  prefetch={false}
+                  className="flex flex-col gap-4 rounded-xl border border-slate-800/50 bg-slate-900/40 p-5 transition hover:border-teal-400/50 hover:bg-slate-900/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/60"
+                >
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="space-y-1">
+                      <h2 className="text-xl font-semibold text-slate-100">{race.name}</h2>
+                      <p className="text-sm text-slate-400">
+                        Кругов: {race.totalLaps} · Категорий: {race.categories.length} · Участников: {race.participants.length}
+                      </p>
+                    </div>
+                    <span
+                      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
+                        race.startedAt
+                          ? "border-teal-500/40 bg-teal-500/10 text-teal-200"
+                          : "border-slate-700 bg-slate-900 text-slate-400"
+                      }`}
+                    >
+                      {race.startedAt ? 'Гонка идёт' : 'Ожидает старта'}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                    <span>Создана: {formatDate(race.createdAt)}</span>
+                    {race.startedAt && <span>Старт: {formatDate(race.startedAt)}</span>}
+                  </div>
+                </Link>
+
+                {origin && (
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-wide text-slate-500">
+                    <span className="text-slate-400">Поделиться:</span>
+                    <Link
+                      className="rounded border border-slate-700 px-2 py-1 text-slate-300 transition hover:border-teal-400 hover:text-teal-200"
+                      href={`/results/${encodeURIComponent(pathSegment)}`}
+                      prefetch={false}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Результаты
+                    </Link>
+                    <Link
+                      className="rounded border border-slate-700 px-2 py-1 text-slate-300 transition hover:border-teal-400 hover:text-teал-200"
+                      href={`/chrono/${encodeURIComponent(pathSegment)}`}
+                      prefetch={false}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Хронограф
+                    </Link>
+                    <Link
+                      className="rounded border border-slate-700 px-2 py-1 text-slate-300 transition hover:border-teal-400 hover:text-teал-200"
+                      href={`/leaderboard/${encodeURIComponent(pathSegment)}`}
+                      prefetch={false}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Лидер
+                    </Link>
+                  </div>
+                )}
+
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
                   <label
                     className="flex w-full flex-col gap-1 text-xs uppercase tracking-wide text-slate-500 sm:w-80"
@@ -952,6 +1080,21 @@ export default function AdminPage() {
                       onChange={(event) => handleRaceDraftChange(race.id, 'name', event.target.value)}
                       onBlur={(event) => handleUpdateRaceName(race.id, event.target.value)}
                       disabled={isSaving}
+                      className="w-full rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none focus:border-teal-400/70 focus:ring-2 focus:ring-teal-400/30 disabled:opacity-60"
+                    />
+                  </label>
+                  <label
+                    className="flex w-full flex-col gap-1 text-xs uppercase tracking-wide text-slate-500 sm:w-56"
+                    htmlFor={"race-slug-" + race.id}
+                  >
+                    Адрес (slug)
+                    <input
+                      id={"race-slug-" + race.id}
+                      value={draft.slug ?? ''}
+                      onChange={(event) => handleRaceDraftChange(race.id, 'slug', event.target.value)}
+                      onBlur={(event) => handleUpdateRaceSlug(race.id, event.target.value)}
+                      disabled={isSaving}
+                      placeholder="naprimer-kriterium"
                       className="w-full rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none focus:border-teal-400/70 focus:ring-2 focus:ring-teal-400/30 disabled:opacity-60"
                     />
                   </label>
@@ -998,44 +1141,13 @@ export default function AdminPage() {
                     />
                   </label>
                 </div>
-                <p className="text-xs text-slate-400">
-                  Участников: {race.participants.length} · Категорий: {race.categories.length}
-                </p>
-                {origin && (
-                  <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-wide text-slate-500">
-                    <span className="text-slate-400">Поделиться:</span>
-                    <Link
-                      className="rounded border border-slate-700 px-2 py-1 text-slate-300 transition hover:border-teal-400 hover:text-teal-200"
-                      href={"/results/" + race.id}
-                      prefetch={false}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Результаты
-                    </Link>
-                    <Link
-                      className="rounded border border-slate-700 px-2 py-1 text-slate-300 transition hover:border-teal-400 hover:text-teal-200"
-                      href={"/chrono/" + race.id}
-                      prefetch={false}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Хронограф
-                    </Link>
-                    <Link
-                      className="rounded border border-slate-700 px-2 py-1 text-slate-300 transition hover:border-teal-400 hover:text-teal-200"
-                      href={"/leaderboard/" + race.id}
-                      prefetch={false}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Лидер
-                    </Link>
-                  </div>
-                )}
               </div>
-              <div className="flex flex-col gap-2 sm:items-end">
-                <button
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-xs text-slate-500">
+                  <span className="font-medium text-slate-300">ID:</span> {race.id}{race.slug ? (<> · <span className="font-medium text-slate-300">Slug:</span> {race.slug}</>) : null}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
                   type="button"
                   onClick={() => handleSelectRace(race.id)}
                   disabled={isSaving || raceDeletingId === race.id}
@@ -1051,6 +1163,7 @@ export default function AdminPage() {
                 >
                   {raceDeletingId === race.id ? 'Удаляем…' : 'Удалить'}
                 </button>
+                </div>
               </div>
             </li>
           );
@@ -1140,6 +1253,12 @@ export default function AdminPage() {
                   placeholder="Название гонки"
                   className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none focus:border-teal-400/70 focus:ring-2 focus:ring-teal-400/30"
                   required
+                />
+                <input
+                  value={raceForm.slug}
+                  onChange={(event) => setRaceForm((prev) => ({ ...prev, slug: event.target.value }))}
+                  placeholder="Адрес гонки (slug, например kriterium)"
+                  className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none focus:border-teal-400/70 focus:ring-2 focus:ring-teal-400/30"
                 />
                 <label className="flex flex-col gap-1 text-xs uppercase tracking-wide text-slate-500">
                   Количество кругов

@@ -5,10 +5,10 @@ import ResultsPage from "@/app/results/page";
 import { useRaceStore } from "@/store/race-store";
 
 export default function ResultsByRacePage() {
-  const params = useParams<{ raceId: string }>();
+  const params = useParams<{ slug: string }>();
   const setError = useRaceStore((state) => state.setError);
 
-  if (!params?.raceId) {
+  if (!params?.slug) {
     setError("Гонка не найдена");
   }
 

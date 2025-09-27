@@ -1,5 +1,12 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class CreateRaceDto {
   @IsString()
@@ -10,6 +17,11 @@ export class CreateRaceDto {
   @IsInt()
   @Min(1)
   totalLaps!: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  slug?: string;
 
   @Type(() => Number)
   @IsInt()

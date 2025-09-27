@@ -12,7 +12,12 @@ export function useRaceIdFromPath() {
     const pattern = /\/(results|chrono|leaderboard)\/(.+)$/;
     const match = pathname.match(pattern);
     if (match) {
-      setCurrentRace(match[2]);
+      const value = match[2];
+      try {
+        setCurrentRace(decodeURIComponent(value));
+      } catch {
+        setCurrentRace(value);
+      }
       return;
     }
 

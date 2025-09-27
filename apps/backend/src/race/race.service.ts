@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import {
   Category,
   Participant,
@@ -21,6 +22,7 @@ import {
 type CreateRaceOptions = {
   name: string;
   totalLaps: number;
+  slug?: string | null;
   tapCooldownSeconds?: number;
 };
 
@@ -55,11 +57,14 @@ type UpdateParticipantOptions = {
 @Injectable()
 export class RaceService {
   private readonly listeners = new Set<(event: RaceBroadcastEvent) => void>();
+  private readonly raceModel: any;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) {
+    this.raceModel = prisma.race;
+  }
 
   async getRaces(): Promise<Race[]> {
-    const races = await this.prisma.race.findMany({
+    const races = await this.raceModel.findMany({
       orderBy: { createdAt: 'desc' },
       include: {
         categories: { orderBy: { order: 'asc' } },
@@ -73,6 +78,7 @@ export class RaceService {
   async getPublicRaceSummaries(): Promise<
     Array<{
       id: string;
+      slug: string | null;
       name: string;
       totalLaps: number;
       tapCooldownSeconds: number;
@@ -82,10 +88,11 @@ export class RaceService {
       categories: number;
     }>
   > {
-    const races = await this.prisma.race.findMany({
+    const races = await this.raceModel.findMany({
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
+        slug: true,
         name: true,
         totalLaps: true,
         tapCooldownSeconds: true,
@@ -98,6 +105,7 @@ export class RaceService {
 
     return races.map((race) => ({
       id: race.id,
+      slug: race.slug,
       name: race.name,
       totalLaps: race.totalLaps,
       tapCooldownSeconds: race.tapCooldownSeconds,
@@ -110,9 +118,9 @@ export class RaceService {
 
   async updateRace(
     raceId: string,
-    options: { name?: string; totalLaps?: number; tapCooldownSeconds?: number },
+    options: { name?: string; totalLaps?: number; tapCooldownSeconds?: number; slug?: string | null },
   ): Promise<Race> {
-    const race = await this.prisma.race.findUnique({
+    const race = await this.raceModel.findUnique({
       where: { id: raceId },
       include: {
         categories: true,
@@ -128,6 +136,7 @@ export class RaceService {
       name?: string;
       totalLaps?: number;
       tapCooldownSeconds?: number;
+      slug?: string | null;
     } = {};
 
     if (options.name !== undefined) {
@@ -152,11 +161,28 @@ export class RaceService {
       data.tapCooldownSeconds = Math.trunc(options.tapCooldownSeconds);
     }
 
+    if (options.slug !== undefined) {
+      if (options.slug === null) {
+        data.slug = null;
+      } else {
+        const raw = options.slug.trim();
+        if (!raw) {
+          data.slug = null;
+        } else {
+          const normalized = this.normalizeSlug(raw);
+          if (!normalized) {
+            throw new BadRequestException('Слаг не может быть пустым');
+          }
+          data.slug = await this.ensureUniqueSlug(normalized, raceId);
+        }
+      }
+    }
+
     if (Object.keys(data).length === 0) {
       return this.toRace(race);
     }
 
-    const updated = await this.prisma.race.update({
+    const updated = await this.raceModel.update({
       where: { id: raceId },
       data,
       include: {
@@ -170,7 +196,7 @@ export class RaceService {
   }
 
   async getStateForRace(raceId: string): Promise<RaceStatePayload> {
-    const race = await this.prisma.race.findUnique({
+    const race = await this.raceModel.findUnique({
       where: { id: raceId },
       include: {
         categories: { orderBy: { order: 'asc' } },
@@ -199,6 +225,7 @@ export class RaceService {
     return {
       race: {
         id: race.id,
+        slug: race.slug ?? null,
         name: race.name,
         totalLaps: race.totalLaps,
         tapCooldownSeconds: race.tapCooldownSeconds,
@@ -208,6 +235,24 @@ export class RaceService {
       riders,
       tapEvents: tapEvents.map((event) => this.toTapEvent(event)),
     } satisfies RaceStatePayload;
+  }
+
+  async getStateForRaceSlug(slug: string): Promise<RaceStatePayload> {
+    const normalized = this.normalizeSlug(slug);
+    if (!normalized) {
+      throw new NotFoundException('Гонка не найдена');
+    }
+
+    const race = await this.raceModel.findUnique({
+      where: { slug: normalized },
+      select: { id: true },
+    });
+
+    if (!race) {
+      throw new NotFoundException('Гонка не найдена');
+    }
+
+    return this.getStateForRace(race.id);
   }
 
   async getLapsRemainingForRace(raceId: string) {
@@ -260,10 +305,29 @@ export class RaceService {
       throw new BadRequestException('Кулдаун отметок должен быть неотрицательным');
     }
 
-    const race = await this.prisma.race.create({
+    let slug: string | null = null;
+    if (options.slug !== undefined && options.slug !== null) {
+      const raw = options.slug.trim();
+      if (raw) {
+        const normalized = this.normalizeSlug(raw);
+        if (!normalized) {
+          throw new BadRequestException('Слаг не может быть пустым');
+        }
+        slug = await this.ensureUniqueSlug(normalized);
+      }
+    }
+
+    if (!slug) {
+      const fromName = this.normalizeSlug(options.name);
+      const base = fromName || `race-${randomUUID().slice(0, 8)}`;
+      slug = await this.ensureUniqueSlug(base);
+    }
+
+    const race = await this.raceModel.create({
       data: {
         name: options.name.trim(),
         totalLaps: Math.trunc(options.totalLaps),
+        slug,
         tapCooldownSeconds: Math.trunc(tapCooldownSeconds),
       },
       include: {
@@ -483,7 +547,7 @@ export class RaceService {
   }
 
   async deleteRace(raceId: string): Promise<void> {
-    const race = await this.prisma.race.findUnique({
+    const race = await this.raceModel.findUnique({
       where: { id: raceId },
     });
 
@@ -491,7 +555,7 @@ export class RaceService {
       throw new NotFoundException('Гонка не найдена');
     }
 
-    await this.prisma.race.delete({ where: { id: raceId } });
+    await this.raceModel.delete({ where: { id: raceId } });
 
     this.emit({
       type: 'race-updated',
@@ -721,7 +785,7 @@ export class RaceService {
       },
     });
 
-    await this.prisma.race.update({
+    await this.raceModel.update({
       where: { id: raceId },
       data: { updatedAt: new Date() },
     });
@@ -744,13 +808,13 @@ export class RaceService {
   }
 
   async startRace(raceId: string): Promise<Race> {
-    const race = await this.prisma.race.findUnique({ where: { id: raceId } });
+    const race = await this.raceModel.findUnique({ where: { id: raceId } });
     if (!race) {
       throw new NotFoundException('Гонка не найдена');
     }
 
     if (race.startedAt) {
-      const withRelations = await this.prisma.race.findUnique({
+      const withRelations = await this.raceModel.findUnique({
         where: { id: raceId },
         include: {
           categories: true,
@@ -763,7 +827,7 @@ export class RaceService {
       return this.toRace(withRelations);
     }
 
-    const updated = await this.prisma.race.update({
+    const updated = await this.raceModel.update({
       where: { id: raceId },
       data: { startedAt: new Date() },
       include: {
@@ -777,13 +841,13 @@ export class RaceService {
   }
 
   async stopRace(raceId: string): Promise<Race> {
-    const race = await this.prisma.race.findUnique({ where: { id: raceId } });
+    const race = await this.raceModel.findUnique({ where: { id: raceId } });
     if (!race) {
       throw new NotFoundException('Гонка не найдена');
     }
 
     if (!race.startedAt) {
-      const withRelations = await this.prisma.race.findUnique({
+      const withRelations = await this.raceModel.findUnique({
         where: { id: raceId },
         include: {
           categories: true,
@@ -796,7 +860,7 @@ export class RaceService {
       return this.toRace(withRelations);
     }
 
-    const updated = await this.prisma.race.update({
+    const updated = await this.raceModel.update({
       where: { id: raceId },
       data: { startedAt: null },
       include: {
@@ -830,6 +894,52 @@ export class RaceService {
     }
     const match = categories.find((category) => category.id === categoryId);
     return match?.name ?? 'Без категории';
+  }
+
+  private normalizeSlug(input?: string | null): string {
+    if (!input) {
+      return '';
+    }
+
+    const normalized = input
+      .normalize('NFKD')
+      .toLowerCase()
+      .replace(/[^\p{Letter}\p{Number}]+/gu, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+    return normalized;
+  }
+
+  private async ensureUniqueSlug(base: string, ignoreRaceId?: string): Promise<string> {
+    let cleaned = base || `race-${randomUUID().slice(0, 8)}`;
+    cleaned = cleaned.replace(/^-+|-+$/g, '').slice(0, 60);
+    if (!cleaned) {
+      cleaned = `race-${randomUUID().slice(0, 8)}`;
+    }
+
+    let candidate = cleaned;
+    let attempt = 1;
+
+    while (true) {
+      const existing = await this.raceModel.findFirst({
+        where: {
+          slug: candidate,
+          ...(ignoreRaceId ? { NOT: { id: ignoreRaceId } } : {}),
+        },
+        select: { id: true },
+      });
+
+      if (!existing) {
+        return candidate;
+      }
+
+      attempt += 1;
+      const suffix = `-${attempt}`;
+      const maxLength = 60;
+      const trimmedBase = cleaned.slice(0, Math.max(1, maxLength - suffix.length));
+      candidate = `${trimmedBase}${suffix}`;
+    }
   }
 
   private toCategory(category: {
@@ -888,6 +998,7 @@ export class RaceService {
     id: string;
     name: string;
     totalLaps: number;
+    slug?: string | null;
     tapCooldownSeconds: number;
     createdAt: Date;
     updatedAt: Date;
@@ -913,6 +1024,7 @@ export class RaceService {
     return {
       id: race.id,
       name: race.name,
+      slug: race.slug ?? null,
       totalLaps: race.totalLaps,
       tapCooldownSeconds: race.tapCooldownSeconds,
       createdAt: race.createdAt.getTime(),

@@ -11,7 +11,11 @@ export function RacePathWatcher() {
   useEffect(() => {
     const match = pathname.match(/\/(?:results|chrono|leaderboard)\/([^/]+)/);
     if (match && match[1]) {
-      setCurrentRace(match[1]);
+      try {
+        setCurrentRace(decodeURIComponent(match[1]));
+      } catch {
+        setCurrentRace(match[1]);
+      }
       return;
     }
     setCurrentRace(undefined);

@@ -34,6 +34,7 @@ export type TapEvent = {
 export type Race = {
   id: string;
   name: string;
+  slug: string | null;
   totalLaps: number;
   tapCooldownSeconds: number;
   createdAt: number;
@@ -46,6 +47,7 @@ export type Race = {
 export type RaceStatePayload = {
   race: {
     id: string;
+    slug: string | null;
     name: string;
     totalLaps: number;
     tapCooldownSeconds: number;

@@ -22,6 +22,7 @@ model Race {
   id            String        @id @default(uuid())
   name          String
   totalLaps     Int
+  slug          String?       @unique
   tapCooldownSeconds Int      @default(0)
   startedAt     DateTime?
   createdAt     DateTime      @default(now())

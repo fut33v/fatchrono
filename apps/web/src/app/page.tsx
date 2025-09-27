@@ -4,6 +4,7 @@ import { API_BASE_URL } from "@/lib/config";
 
 type PublicRace = {
   id: string;
+  slug: string | null;
   name: string;
   totalLaps: number;
   startedAt: number | null;
@@ -68,6 +69,7 @@ export default async function HomePage() {
             <ul className="grid gap-4">
               {races.map((race) => {
                 const hasStarted = race.startedAt !== null;
+                const pathSegment = race.slug ?? race.id;
 
                 return (
                   <li
@@ -75,7 +77,7 @@ export default async function HomePage() {
                     className="rounded-2xl border border-slate-800 bg-slate-900/60 shadow-sm transition hover:border-teal-400/60 hover:bg-slate-900/70"
                   >
                     <Link
-                      href={`/results/${race.id}`}
+                      href={`/results/${encodeURIComponent(pathSegment)}`}
                       prefetch={false}
                       className="flex flex-col gap-3 p-6"
                     >
@@ -101,17 +103,6 @@ export default async function HomePage() {
                       <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
                         <span>Создана: {formatDate(race.createdAt)}</span>
                         {race.startedAt && <span>Старт: {formatDate(race.startedAt)}</span>}
-                      </div>
-                      <div className="flex flex-wrap gap-2 text-xs text-slate-400">
-                        <span className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-200">
-                          Результаты
-                        </span>
-                        <span className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-200">
-                          Табло лидеров
-                        </span>
-                        <span className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-200">
-                          Хронометраж
-                        </span>
                       </div>
                     </Link>
                   </li>

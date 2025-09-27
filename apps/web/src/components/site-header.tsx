@@ -17,15 +17,18 @@ export function SiteHeader() {
   const pathname = usePathname();
   const user = useAuthStore((state) => state.user);
   const currentRaceId = useRaceStore((state) => state.currentRaceId);
+  const currentRaceSlug = useRaceStore((state) => state.currentRaceSlug);
 
   const navItems: NavItem[] = [];
 
   navItems.push({ key: "home", href: "/", label: "Главная", isActive: pathname === "/" });
 
-  if (currentRaceId) {
+  const racePathSegment = currentRaceSlug ?? currentRaceId;
+
+  if (racePathSegment) {
     navItems.push({
       key: "results",
-      href: `/results/${currentRaceId}`,
+      href: `/results/${encodeURIComponent(racePathSegment)}`,
       label: "Результаты",
       isActive: pathname.startsWith("/results/"),
     });
@@ -33,7 +36,7 @@ export function SiteHeader() {
     if (user?.role === "admin") {
       navItems.push({
         key: "chrono",
-        href: `/chrono/${currentRaceId}`,
+        href: `/chrono/${encodeURIComponent(racePathSegment)}`,
         label: "Хронометраж",
         isActive: pathname.startsWith("/chrono/"),
       });
@@ -41,20 +44,18 @@ export function SiteHeader() {
 
     navItems.push({
       key: "leaderboard",
-      href: `/leaderboard/${currentRaceId}`,
+      href: `/leaderboard/${encodeURIComponent(racePathSegment)}`,
       label: "Лидер",
       isActive: pathname.startsWith("/leaderboard/"),
     });
   }
 
-  if (user?.role === "admin") {
-    navItems.push({
-      key: "admin",
-      href: "/admin",
-      label: "Админ",
-      isActive: pathname.startsWith("/admin"),
-    });
-  }
+  navItems.push({
+    key: "admin",
+    href: "/admin",
+    label: "Админ",
+    isActive: pathname.startsWith("/admin"),
+  });
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-800/60 bg-slate-950/85 backdrop-blur">

@@ -18,6 +18,7 @@ export default function ManualChronoPage() {
   const logout = useAuthStore((state) => state.logout);
 
   const currentRaceId = useRaceStore((state) => state.currentRaceId);
+  const currentRaceSlug = useRaceStore((state) => state.currentRaceSlug);
   const race = useRaceStore((state) => state.race);
   const riders = useRaceStore((state) => state.riders);
   const tapEvents = useRaceStore((state) => state.tapEvents);
@@ -35,6 +36,8 @@ export default function ManualChronoPage() {
   const [now, setNow] = useState(() => Date.now());
   const [pendingCancelIds, setPendingCancelIds] = useState<string[]>([]);
   const lastTapAttemptRef = useRef<Map<number, number>>(new Map());
+
+  const raceSegment = currentRaceSlug ?? currentRaceId;
 
   const lastTapByBib = useMemo(() => {
     const map = new Map<number, number>();
@@ -290,11 +293,11 @@ export default function ManualChronoPage() {
     }
   };
 
-  if (!currentRaceId) {
+  if (!currentRaceId && !currentRaceSlug) {
     return (
       <div className="flex min-h-[calc(100vh-64px)] items-center justify-center bg-slate-950 px-4 text-slate-100">
         <div className="max-w-md space-y-3 text-center text-sm text-slate-400">
-          <p>Чтобы открыть ручной хронометраж, перейдите по ссылке вида `/chrono/&lt;id гонки&gt;`.</p>
+          <p>Чтобы открыть ручной хронометраж, перейдите по ссылке вида `/chrono/&lt;slug&gt;`.</p>
           <p>Скопируйте ссылку из админки и откройте её на устройстве хронометриста.</p>
         </div>
       </div>
@@ -366,7 +369,7 @@ export default function ManualChronoPage() {
             <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-wide text-slate-500">
               <span className="text-slate-400">Ссылки:</span>
               <Link
-                href={`/results/${currentRaceId}`}
+                href={raceSegment ? `/results/${raceSegment}` : "#"}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="rounded border border-slate-700 px-2 py-1 text-slate-300 transition hover:border-teal-400 hover:text-teal-200"
@@ -374,7 +377,7 @@ export default function ManualChronoPage() {
                 Результаты
               </Link>
               <Link
-                href={`/leaderboard/${currentRaceId}`}
+                href={raceSegment ? `/leaderboard/${raceSegment}` : "#"}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="rounded border border-slate-700 px-2 py-1 text-slate-300 transition hover:border-teal-400 hover:text-teал-200"

@@ -15,6 +15,8 @@ export function RaceSync() {
   const setConnectionStatus = useRaceStore((state) => state.setConnectionStatus);
   const setError = useRaceStore((state) => state.setError);
   const currentRaceId = useRaceStore((state) => state.currentRaceId);
+  const currentRaceSlug = useRaceStore((state) => state.currentRaceSlug);
+  const setResolvedRace = useRaceStore((state) => state.setResolvedRace);
 
   const currentRaceRef = useRef<string | undefined>(currentRaceId);
 
@@ -27,15 +29,44 @@ export function RaceSync() {
 
     async function bootstrap() {
       try {
-        if (!currentRaceId) {
+        if (!currentRaceSlug && !currentRaceId) {
           setInitialState({ race: null, categories: [], riders: [], tapEvents: [] });
           setError(undefined);
           return;
         }
 
-        const response = await fetch(`${API_BASE_URL}/race/${currentRaceId}/state`, {
-          cache: "no-store",
-        });
+        let response: Response | null = null;
+        let resolvedBySlug = false;
+
+        if (currentRaceSlug) {
+          response = await fetch(
+            `${API_BASE_URL}/race/slug/${encodeURIComponent(currentRaceSlug)}/state`,
+            { cache: "no-store" },
+          );
+
+          if (!response.ok) {
+            const looksLikeId = /^[0-9a-fA-F-]{32,36}$/.test(currentRaceSlug);
+            if (looksLikeId || currentRaceId) {
+              response = await fetch(
+                `${API_BASE_URL}/race/${encodeURIComponent(currentRaceId ?? currentRaceSlug)}/state`,
+                { cache: "no-store" },
+              );
+            }
+          } else {
+            resolvedBySlug = true;
+          }
+        }
+
+        if (!response && currentRaceId) {
+          response = await fetch(`${API_BASE_URL}/race/${currentRaceId}/state`, {
+            cache: "no-store",
+          });
+        }
+
+        if (!response) {
+          throw new Error('Race reference is missing');
+        }
+
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
@@ -44,6 +75,10 @@ export function RaceSync() {
           return;
         }
         setInitialState(data);
+        setResolvedRace(
+          data?.race?.id ?? currentRaceId,
+          data?.race ? data.race.slug : resolvedBySlug ? currentRaceSlug : undefined,
+        );
         setError(undefined);
       } catch (error) {
         console.error("Не удалось получить состояние гонки", error);
@@ -126,7 +161,16 @@ export function RaceSync() {
         subscribers = 0;
       }
     };
-  }, [currentRaceId, setInitialState, upsertTapEvent, removeTapEvent, setConnectionStatus, setError]);
+  }, [
+    currentRaceId,
+    currentRaceSlug,
+    setInitialState,
+    upsertTapEvent,
+    removeTapEvent,
+    setConnectionStatus,
+    setError,
+    setResolvedRace,
+  ]);
 
   return null;
 }

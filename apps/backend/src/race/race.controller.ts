@@ -52,6 +52,11 @@ export class RaceController {
     return { race };
   }
 
+  @Get('slug/:slug/state')
+  getStateBySlug(@Param('slug') slug: string) {
+    return this.raceService.getStateForRaceSlug(slug);
+  }
+
   @Get(':raceId/state')
   getStateByRace(@Param('raceId') raceId: string) {
     return this.raceService.getStateForRace(raceId);

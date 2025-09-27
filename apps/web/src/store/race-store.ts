@@ -9,6 +9,7 @@ export type Category = {
 
 export type RaceSummary = {
   id: string;
+  slug: string | null;
   name: string;
   totalLaps: number;
   tapCooldownSeconds: number;
@@ -52,12 +53,14 @@ type RaceStore = {
   isConnected: boolean;
   error?: string;
   currentRaceId?: string;
+  currentRaceSlug?: string;
   setInitialState: (payload: RaceStatePayload) => void;
   upsertTapEvent: (event: TapEvent) => void;
   removeTapEvent: (eventId: string) => void;
   setConnectionStatus: (connected: boolean) => void;
   setError: (message?: string) => void;
-  setCurrentRace: (raceId?: string) => void;
+  setCurrentRace: (slug?: string) => void;
+  setResolvedRace: (id?: string | null, slug?: string | null) => void;
 };
 
 export const useRaceStore = create<RaceStore>((set) => ({
@@ -69,6 +72,7 @@ export const useRaceStore = create<RaceStore>((set) => ({
   isConnected: false,
   error: undefined,
   currentRaceId: undefined,
+  currentRaceSlug: undefined,
   setInitialState: ({ race, categories, riders, tapEvents }) => {
     set({
       race,
@@ -95,5 +99,15 @@ export const useRaceStore = create<RaceStore>((set) => ({
   },
   setConnectionStatus: (connected) => set({ isConnected: connected }),
   setError: (message) => set({ error: message }),
-  setCurrentRace: (raceId) => set({ currentRaceId: raceId }),
+  setCurrentRace: (slug) =>
+    set(() => ({
+      currentRaceSlug: slug || undefined,
+      currentRaceId: undefined,
+      error: undefined,
+    })),
+  setResolvedRace: (id, slug) =>
+    set((state) => ({
+      currentRaceId: id ?? undefined,
+      currentRaceSlug: slug !== undefined ? slug ?? undefined : state.currentRaceSlug,
+    })),
 }));

@@ -8,6 +8,7 @@ export default function LeaderboardPage() {
   const tapEvents = useRaceStore((state) => state.tapEvents);
   const riders = useRaceStore((state) => state.riders);
   const currentRaceId = useRaceStore((state) => state.currentRaceId);
+  const currentRaceSlug = useRaceStore((state) => state.currentRaceSlug);
   const error = useRaceStore((state) => state.error);
   const isConnected = useRaceStore((state) => state.isConnected);
   const isHydrated = useRaceStore((state) => state.isHydrated);
@@ -48,11 +49,11 @@ export default function LeaderboardPage() {
     };
   }, [race, tapEvents, riders]);
 
-  if (!currentRaceId) {
+  if (!currentRaceId && !currentRaceSlug) {
     return (
       <div className="flex min-h-[calc(100vh-64px)] items-center justify-center bg-black px-4 text-sm text-zinc-300">
         <div className="max-w-md space-y-3 text-center">
-          <p>Ссылка на табло лидера должна содержать идентификатор гонки: `/leaderboard/&lt;id&gt;`.</p>
+          <p>Ссылка на табло лидера должна содержать адрес гонки: `/leaderboard/&lt;slug&gt;`.</p>
           <p>Откройте ссылку из админки или пригласительного сообщения.</p>
         </div>
       </div>
