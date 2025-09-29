@@ -48,6 +48,7 @@ type AdminRace = {
   slug: string | null;
   name: string;
   totalLaps: number;
+  startedAt: number | null;
   tapCooldownSeconds: number;
   createdAt: number;
   updatedAt: number;
