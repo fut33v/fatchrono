@@ -10,6 +10,7 @@ type ResultRow = {
   category: string;
   laps: number;
   lastTap: number | null;
+  result: string;
   gap: string;
 };
 
@@ -67,6 +68,40 @@ function compareResults(a: ResultRow, b: ResultRow): number {
   return a.lastTap - b.lastTap;
 }
 
+function formatResult(lastTap: number | null, raceStart?: number | null): string {
+  if (!lastTap) {
+    return "—";
+  }
+
+  if (raceStart && lastTap >= raceStart) {
+    const delta = lastTap - raceStart;
+    if (delta < 0) {
+      return "—";
+    }
+
+    const totalSeconds = Math.floor(delta / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    const tenths = Math.floor((delta % 1000) / 100);
+
+    const pad = (value: number) => value.toString().padStart(2, "0");
+
+    if (hours > 0) {
+      return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}.${tenths}`;
+    }
+
+    return `${pad(minutes)}:${pad(seconds)}.${tenths}`;
+  }
+
+  return new Date(lastTap).toLocaleTimeString("ru-RU", {
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
 export default function ResultsPage() {
   const race = useRaceStore((state) => state.race);
   const currentRaceId = useRaceStore((state) => state.currentRaceId);
@@ -107,6 +142,7 @@ export default function ResultsPage() {
         category: rider.category,
         laps: entry?.laps ?? 0,
         lastTap: entry?.lastTap ?? null,
+        result: "—",
         gap: "—",
       } satisfies ResultRow;
     });
@@ -114,9 +150,11 @@ export default function ResultsPage() {
     mapped.sort(compareResults);
 
     const leader = mapped[0];
+    const raceStart = race?.startedAt ?? null;
     const ranked = mapped.map((row, index) => ({
       ...row,
       position: index + 1,
+      result: formatResult(row.lastTap, raceStart),
       gap: formatGap(leader, row),
     }));
 
@@ -154,7 +192,7 @@ export default function ResultsPage() {
       rows: ranked,
       podium: podiumGroups,
     };
-  }, [riders, tapEvents, categories]);
+  }, [riders, tapEvents, categories, race?.startedAt]);
 
   const totalTapCount = tapEvents.length;
   const leader = rows[0];
@@ -221,6 +259,7 @@ export default function ResultsPage() {
                 <th className="px-4 py-3">Гонщик</th>
                 <th className="px-4 py-3">Категория</th>
                 <th className="px-4 py-3">Круги</th>
+                <th className="px-4 py-3">Результат</th>
                 <th className="px-4 py-3">Отставание</th>
               </tr>
             </thead>
@@ -235,6 +274,7 @@ export default function ResultsPage() {
                   <td className="px-4 py-3">{racer.name}</td>
                   <td className="px-4 py-3 text-slate-300">{racer.category}</td>
                   <td className="px-4 py-3">{racer.laps}</td>
+                  <td className="px-4 py-3 text-slate-200">{racer.result}</td>
                   <td className="px-4 py-3 text-teal-300">{racer.gap}</td>
                 </tr>
               ))}
