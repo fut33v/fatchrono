@@ -150,7 +150,13 @@ export class RaceService {
 
   async updateRace(
     raceId: string,
-    options: { name?: string; totalLaps?: number; tapCooldownSeconds?: number; slug?: string | null },
+    options: {
+      name?: string;
+      totalLaps?: number;
+      tapCooldownSeconds?: number;
+      slug?: string | null;
+      startedAt?: string | null;
+    },
   ): Promise<Race> {
     const race = await this.raceModel.findUnique({
       where: { id: raceId },
@@ -169,6 +175,7 @@ export class RaceService {
       totalLaps?: number;
       tapCooldownSeconds?: number;
       slug?: string | null;
+      startedAt?: Date | null;
     } = {};
 
     if (options.name !== undefined) {
@@ -207,6 +214,18 @@ export class RaceService {
           }
           data.slug = await this.ensureUniqueSlug(normalized, raceId);
         }
+      }
+    }
+
+    if (options.startedAt !== undefined) {
+      if (options.startedAt === null) {
+        data.startedAt = null;
+      } else {
+        const parsed = new Date(options.startedAt);
+        if (!Number.isFinite(parsed.getTime())) {
+          throw new BadRequestException('Некорректное время старта гонки');
+        }
+        data.startedAt = parsed;
       }
     }
 

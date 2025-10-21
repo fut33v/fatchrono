@@ -1,5 +1,6 @@
 import {
   IsInt,
+  IsISO8601,
   IsOptional,
   IsPositive,
   IsString,
@@ -27,4 +28,8 @@ export class UpdateRaceDto {
   @IsInt()
   @Min(0)
   tapCooldownSeconds?: number;
+
+  @IsOptional()
+  @IsISO8601()
+  startedAt?: string | null;
 }

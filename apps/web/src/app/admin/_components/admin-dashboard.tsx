@@ -60,6 +60,14 @@ type RacesResponse = {
   races: AdminRace[];
 };
 
+type RaceDraft = {
+  name: string;
+  slug: string;
+  totalLaps: string;
+  tapCooldownSeconds: string;
+  startedAt: string;
+};
+
 const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
   dateStyle: 'medium',
   timeStyle: 'short',
@@ -67,6 +75,38 @@ const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
 
 function formatDate(timestamp: number) {
   return dateFormatter.format(new Date(timestamp));
+}
+
+function formatDateTimeLocal(date: Date): string {
+  const pad = (value: number) => value.toString().padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+function formatRaceStartedAtInput(timestamp?: number | null): string {
+  if (!timestamp) {
+    return '';
+  }
+  return formatDateTimeLocal(new Date(timestamp));
+}
+
+function buildRaceDraft(race: AdminRace): RaceDraft {
+  return {
+    name: race.name,
+    slug: race.slug ?? '',
+    totalLaps: race.totalLaps.toString(),
+    tapCooldownSeconds: String(race.tapCooldownSeconds ?? 0),
+    startedAt: formatRaceStartedAtInput(race.startedAt),
+  };
+}
+
+function createEmptyRaceDraft(): RaceDraft {
+  return {
+    name: '',
+    slug: '',
+    totalLaps: '',
+    tapCooldownSeconds: '0',
+    startedAt: '',
+  };
 }
 
 type AdminDashboardProps = {
@@ -95,7 +135,7 @@ export default function AdminDashboard({ raceSlug }: AdminDashboardProps) {
   const [categoryForm, setCategoryForm] = useState({ name: "", description: "" });
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [categoryDrafts, setCategoryDrafts] = useState<Record<string, { name: string; description: string }>>({});
-  const [raceDrafts, setRaceDrafts] = useState<Record<string, { name: string; slug: string; totalLaps: string; tapCooldownSeconds: string }>>({});
+  const [raceDrafts, setRaceDrafts] = useState<Record<string, RaceDraft>>({});
   const [raceSavingId, setRaceSavingId] = useState<string | null>(null);
   const [raceDeletingId, setRaceDeletingId] = useState<string | null>(null);
   const [categorySavingId, setCategorySavingId] = useState<string | null>(null);
@@ -116,6 +156,8 @@ export default function AdminDashboard({ raceSlug }: AdminDashboardProps) {
   const [isDeletingParticipants, setIsDeletingParticipants] = useState(false);
   const [participantUpdatingId, setParticipantUpdatingId] = useState<string | null>(null);
   const selectAllRef = useRef<HTMLInputElement | null>(null);
+  const lastSubmittedStartedAtRef = useRef<Map<string, string>>(new Map());
+  const pendingStartedAtRef = useRef<Map<string, string>>(new Map());
   const [isRaceSectionOpen, setIsRaceSectionOpen] = useState(true);
   const [isCategorySectionOpen, setIsCategorySectionOpen] = useState(true);
   const [isParticipantSectionOpen, setIsParticipantSectionOpen] = useState(true);
@@ -127,16 +169,16 @@ export default function AdminDashboard({ raceSlug }: AdminDashboardProps) {
   );
 
   useEffect(() => {
-    const drafts: Record<string, { name: string; slug: string; totalLaps: string; tapCooldownSeconds: string }> = {};
+    const drafts: Record<string, RaceDraft> = {};
+    const submitted = new Map<string, string>();
     for (const race of races) {
-      drafts[race.id] = {
-        name: race.name,
-        slug: race.slug ?? "",
-        totalLaps: race.totalLaps.toString(),
-        tapCooldownSeconds: String(race.tapCooldownSeconds ?? 0),
-      };
+      const draft = buildRaceDraft(race);
+      drafts[race.id] = draft;
+      submitted.set(race.id, draft.startedAt);
     }
     setRaceDrafts(drafts);
+    lastSubmittedStartedAtRef.current = submitted;
+    pendingStartedAtRef.current = new Map();
   }, [races]);
 
   useEffect(() => {
@@ -540,18 +582,12 @@ export default function AdminDashboard({ raceSlug }: AdminDashboardProps) {
 
   function handleRaceDraftChange(
     raceId: string,
-    field: 'name' | 'slug' | 'totalLaps' | 'tapCooldownSeconds',
+    field: 'name' | 'slug' | 'totalLaps' | 'tapCooldownSeconds' | 'startedAt',
     value: string,
   ) {
     setRaceDrafts((prev) => {
-      const existing = prev[raceId] ?? {
-        name: races.find((race) => race.id === raceId)?.name ?? '',
-        slug: races.find((race) => race.id === raceId)?.slug ?? '',
-        totalLaps: races.find((race) => race.id === raceId)?.totalLaps.toString() ?? '',
-        tapCooldownSeconds: String(
-          (races.find((race) => race.id === raceId)?.tapCooldownSeconds) ?? 0,
-        ),
-      };
+      const race = races.find((item) => item.id === raceId);
+      const existing = prev[raceId] ?? (race ? buildRaceDraft(race) : createEmptyRaceDraft());
       return {
         ...prev,
         [raceId]: {
@@ -567,6 +603,7 @@ export default function AdminDashboard({ raceSlug }: AdminDashboardProps) {
     if (!race) {
       return;
     }
+    const fallbackDraft = buildRaceDraft(race);
 
     const trimmed = rawName.trim();
     if (trimmed === race.name) {
@@ -578,11 +615,7 @@ export default function AdminDashboard({ raceSlug }: AdminDashboardProps) {
       setRaceDrafts((prev) => ({
         ...prev,
         [raceId]: {
-          ...(prev[raceId] ?? {
-            slug: race.slug ?? '',
-            totalLaps: race.totalLaps.toString(),
-            tapCooldownSeconds: String(race.tapCooldownSeconds ?? 0),
-          }),
+          ...(prev[raceId] ?? fallbackDraft),
           name: race.name,
         },
       }));
@@ -605,11 +638,7 @@ export default function AdminDashboard({ raceSlug }: AdminDashboardProps) {
       setRaceDrafts((prev) => ({
         ...prev,
         [raceId]: {
-          ...(prev[raceId] ?? {
-            slug: race.slug ?? '',
-            totalLaps: race.totalLaps.toString(),
-            tapCooldownSeconds: String(race.tapCooldownSeconds ?? 0),
-          }),
+          ...(prev[raceId] ?? fallbackDraft),
           name: race.name,
         },
       }));
@@ -623,6 +652,7 @@ export default function AdminDashboard({ raceSlug }: AdminDashboardProps) {
     if (!race) {
       return;
     }
+    const fallbackDraft = buildRaceDraft(race);
 
     const parsed = Number.parseInt(lapsValue, 10);
     if (!Number.isFinite(parsed) || parsed <= 0) {
@@ -630,11 +660,7 @@ export default function AdminDashboard({ raceSlug }: AdminDashboardProps) {
       setRaceDrafts((prev) => ({
         ...prev,
         [raceId]: {
-          ...(prev[raceId] ?? {
-            name: race.name,
-            slug: race.slug ?? '',
-            tapCooldownSeconds: String(race.tapCooldownSeconds ?? 0),
-          }),
+          ...(prev[raceId] ?? fallbackDraft),
           totalLaps: race.totalLaps.toString(),
         },
       }));
@@ -661,11 +687,7 @@ export default function AdminDashboard({ raceSlug }: AdminDashboardProps) {
       setRaceDrafts((prev) => ({
         ...prev,
         [raceId]: {
-          ...(prev[raceId] ?? {
-            name: race.name,
-            slug: race.slug ?? '',
-            tapCooldownSeconds: String(race.tapCooldownSeconds ?? 0),
-          }),
+          ...(prev[raceId] ?? fallbackDraft),
           totalLaps: race.totalLaps.toString(),
         },
       }));
@@ -679,6 +701,7 @@ export default function AdminDashboard({ raceSlug }: AdminDashboardProps) {
     if (!race) {
       return;
     }
+    const fallbackDraft = buildRaceDraft(race);
 
     const trimmed = rawSlug.trim();
     const currentSlug = race.slug ?? '';
@@ -710,11 +733,7 @@ export default function AdminDashboard({ raceSlug }: AdminDashboardProps) {
       setRaceDrafts((prev) => ({
         ...prev,
         [raceId]: {
-          ...(prev[raceId] ?? {
-            name: race.name,
-            totalLaps: race.totalLaps.toString(),
-            tapCooldownSeconds: String(race.tapCooldownSeconds ?? 0),
-          }),
+          ...(prev[raceId] ?? fallbackDraft),
           slug: currentSlug,
         },
       }));
@@ -731,6 +750,7 @@ export default function AdminDashboard({ raceSlug }: AdminDashboardProps) {
     if (!race) {
       return;
     }
+    const fallbackDraft = buildRaceDraft(race);
 
     const trimmed = cooldownValue.trim();
     if (trimmed.length === 0) {
@@ -738,12 +758,7 @@ export default function AdminDashboard({ raceSlug }: AdminDashboardProps) {
       setRaceDrafts((prev) => ({
         ...prev,
         [raceId]: {
-          ...(prev[raceId] ?? {
-            name: race.name,
-            slug: race.slug ?? '',
-            totalLaps: race.totalLaps.toString(),
-            tapCooldownSeconds: String(race.tapCooldownSeconds ?? 0),
-          }),
+          ...(prev[raceId] ?? fallbackDraft),
           tapCooldownSeconds: String(race.tapCooldownSeconds ?? 0),
         },
       }));
@@ -756,12 +771,7 @@ export default function AdminDashboard({ raceSlug }: AdminDashboardProps) {
       setRaceDrafts((prev) => ({
         ...prev,
         [raceId]: {
-          ...(prev[raceId] ?? {
-            name: race.name,
-            slug: race.slug ?? '',
-            totalLaps: race.totalLaps.toString(),
-            tapCooldownSeconds: String(race.tapCooldownSeconds ?? 0),
-          }),
+          ...(prev[raceId] ?? fallbackDraft),
           tapCooldownSeconds: String(race.tapCooldownSeconds ?? 0),
         },
       }));
@@ -788,18 +798,109 @@ export default function AdminDashboard({ raceSlug }: AdminDashboardProps) {
       setRaceDrafts((prev) => ({
         ...prev,
         [raceId]: {
-          ...(prev[raceId] ?? {
-            name: race.name,
-            slug: race.slug ?? '',
-            totalLaps: race.totalLaps.toString(),
-            tapCooldownSeconds: String(race.tapCooldownSeconds ?? 0),
-          }),
+          ...(prev[raceId] ?? fallbackDraft),
           tapCooldownSeconds: String(race.tapCooldownSeconds ?? 0),
         },
       }));
     } finally {
       setRaceSavingId(null);
     }
+  }
+
+  async function handleUpdateRaceStartedAt(raceId: string, value: string, force = false) {
+    const race = races.find((item) => item.id === raceId);
+    if (!race) {
+      return;
+    }
+    const fallbackDraft = buildRaceDraft(race);
+    const trimmed = value.trim();
+    const normalizedInput = trimmed === ''
+      ? ''
+      : trimmed.length === 16
+      ? `${trimmed}:00`
+      : trimmed;
+    const currentInput = formatRaceStartedAtInput(race.startedAt);
+    const lastSubmitted = lastSubmittedStartedAtRef.current.get(raceId);
+    const pendingValue = pendingStartedAtRef.current.get(raceId);
+
+    if (normalizedInput === currentInput) {
+      lastSubmittedStartedAtRef.current.set(raceId, normalizedInput);
+      return;
+    }
+
+    if (!force && normalizedInput === lastSubmitted) {
+      return;
+    }
+
+    if (!force && pendingValue !== undefined && pendingValue === normalizedInput) {
+      return;
+    }
+
+    let payload: string | null = null;
+    if (normalizedInput) {
+      const parsed = new Date(normalizedInput);
+      const timestamp = parsed.getTime();
+      if (Number.isNaN(timestamp)) {
+        setError('Некорректное время старта');
+        setRaceDrafts((prev) => ({
+          ...prev,
+          [raceId]: {
+            ...(prev[raceId] ?? fallbackDraft),
+            startedAt: currentInput,
+          },
+        }));
+        lastSubmittedStartedAtRef.current.set(raceId, currentInput);
+        pendingStartedAtRef.current.delete(raceId);
+        return;
+      }
+      payload = parsed.toISOString();
+    }
+
+    try {
+      setRaceSavingId(raceId);
+      setFeedback(undefined);
+      setError(undefined);
+      pendingStartedAtRef.current.set(raceId, normalizedInput);
+      await authFetch(`/race/${raceId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ startedAt: payload }),
+      });
+      setFeedback(payload ? 'Время старта обновлено' : 'Время старта сброшено');
+      lastSubmittedStartedAtRef.current.set(raceId, normalizedInput);
+      setRaceDrafts((prev) => ({
+        ...prev,
+        [raceId]: {
+          ...(prev[raceId] ?? fallbackDraft),
+          startedAt: normalizedInput,
+        },
+      }));
+      await fetchRaces();
+    } catch (err) {
+      console.error('Не удалось обновить время старта', err);
+      setError('Не удалось обновить время старта');
+      setRaceDrafts((prev) => ({
+        ...prev,
+        [raceId]: {
+          ...(prev[raceId] ?? fallbackDraft),
+          startedAt: currentInput,
+        },
+      }));
+      lastSubmittedStartedAtRef.current.set(raceId, currentInput);
+    } finally {
+      pendingStartedAtRef.current.delete(raceId);
+      setRaceSavingId(null);
+    }
+  }
+
+  function handleSetRaceStartNow(raceId: string) {
+    const nowInput = formatDateTimeLocal(new Date());
+    handleRaceDraftChange(raceId, 'startedAt', nowInput);
+    void handleUpdateRaceStartedAt(raceId, nowInput, true);
+  }
+
+  function handleClearRaceStart(raceId: string) {
+    handleRaceDraftChange(raceId, 'startedAt', '');
+    void handleUpdateRaceStartedAt(raceId, '', true);
   }
 
   async function handleCreateRace(event: FormEvent<HTMLFormElement>) {
@@ -1107,12 +1208,7 @@ export default function AdminDashboard({ raceSlug }: AdminDashboardProps) {
     return (
       <ul className="space-y-2">
         {races.map((race) => {
-          const draft = raceDrafts[race.id] ?? {
-            name: race.name,
-            slug: race.slug ?? '',
-            totalLaps: race.totalLaps.toString(),
-            tapCooldownSeconds: String(race.tapCooldownSeconds ?? 0),
-          };
+          const draft = raceDrafts[race.id] ?? buildRaceDraft(race);
           const isSaving = raceSavingId === race.id;
           const pathSegment = race.slug ?? race.id;
 
@@ -1237,7 +1333,7 @@ export default function AdminDashboard({ raceSlug }: AdminDashboardProps) {
                     Кулдаун отметки (сек)
                     <input
                       id={"race-cooldown-" + race.id}
-                      value={draft.tapCooldownSeconds ?? String(race.tapCooldownSeconds ?? 0)}
+                      value={draft.tapCooldownSeconds}
                       onChange={(event) =>
                         handleRaceDraftChange(
                           race.id,
@@ -1252,9 +1348,43 @@ export default function AdminDashboard({ raceSlug }: AdminDashboardProps) {
                       type="number"
                       min={0}
                       inputMode="numeric"
-                      className="w-full rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none focus:border-teal-400/70 focus:ring-2 focus:ring-teal-400/30 disabled:opacity-60"
+                      className="w-full rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none focus:border-teal-400/70 focus:ring-2 focus:ring-teал-400/30 disabled:opacity-60"
                     />
                   </label>
+                  <div className="flex w-full flex-col gap-2 text-xs uppercase tracking-wide text-slate-500 sm:w-64">
+                    <label className="flex flex-col gap-1" htmlFor={"race-started-at-" + race.id}>
+                      Время старта
+                      <input
+                        id={"race-started-at-" + race.id}
+                        type="datetime-local"
+                        step="1"
+                        value={draft.startedAt}
+                        onChange={(event) => handleRaceDraftChange(race.id, 'startedAt', event.target.value)}
+                        onBlur={(event) => { void handleUpdateRaceStartedAt(race.id, event.target.value); }}
+                        disabled={isSaving}
+                        className="w-full rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none focus:border-teal-400/70 focus:ring-2 focus:ring-teал-400/30 disabled:opacity-60"
+                      />
+                    </label>
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] normal-case text-slate-500">
+                      <button
+                        type="button"
+                        onClick={() => handleSetRaceStartNow(race.id)}
+                        disabled={isSaving}
+                        className="rounded border border-teal-500/40 bg-teal-500/10 px-3 py-1 text-[11px] font-semibold text-teal-200 transition hover:border-teal-400 hover:bg-teал-500/20 disabled:opacity-60"
+                      >
+                        Сейчас
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleClearRaceStart(race.id)}
+                        disabled={isSaving}
+                        className="rounded border border-slate-700 bg-slate-900 px-3 py-1 text-[11px] font-semibold text-slate-300 transition hover:border-rose-400 hover:text-rose-200 disabled:opacity-60"
+                      >
+                        Сбросить
+                      </button>
+                      <span>Местное время, сохраняется в UTC.</span>
+                    </div>
+                  </div>
                 </div>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
