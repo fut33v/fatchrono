@@ -75,6 +75,38 @@ export class RaceService {
     return races.map((race) => this.toRace(race));
   }
 
+  async getRaceById(raceId: string): Promise<Race> {
+    const race = await this.raceModel.findUnique({
+      where: { id: raceId },
+      include: {
+        categories: { orderBy: { order: 'asc' } },
+        participants: { orderBy: { bib: 'asc' } },
+      },
+    });
+
+    if (!race) {
+      throw new NotFoundException('Гонка не найдена');
+    }
+
+    return this.toRace(race);
+  }
+
+  async getRaceBySlug(slug: string): Promise<Race> {
+    const race = await this.raceModel.findUnique({
+      where: { slug },
+      include: {
+        categories: { orderBy: { order: 'asc' } },
+        participants: { orderBy: { bib: 'asc' } },
+      },
+    });
+
+    if (!race) {
+      throw new NotFoundException('Гонка не найдена');
+    }
+
+    return this.toRace(race);
+  }
+
   async getPublicRaceSummaries(): Promise<
     Array<{
       id: string;
@@ -389,6 +421,32 @@ export class RaceService {
 
     await this.emitRaceUpdate(raceId);
     return this.toCategory(updated);
+  }
+
+  async removeCategory(raceId: string, categoryId: string): Promise<Category> {
+    const category = await this.ensureCategoryExists(raceId, categoryId);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.tapEvent.updateMany({
+        where: { raceId, categoryId },
+        data: {
+          categoryId: null,
+          categoryName: 'Без категории',
+        },
+      });
+
+      await tx.participant.updateMany({
+        where: { raceId, categoryId },
+        data: { categoryId: null },
+      });
+
+      await tx.category.delete({
+        where: { id: categoryId },
+      });
+    });
+
+    await this.emitRaceUpdate(raceId);
+    return this.toCategory(category);
   }
 
   async addParticipant(

@@ -44,6 +44,22 @@ export class RaceController {
     return this.raceService.getPublicRaceSummaries();
   }
 
+  @Get('slug/:slug')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  async getRaceBySlug(@Param('slug') slug: string) {
+    const race = await this.raceService.getRaceBySlug(slug);
+    return { race };
+  }
+
+  @Get(':raceId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  async getRace(@Param('raceId') raceId: string) {
+    const race = await this.raceService.getRaceById(raceId);
+    return { race };
+  }
+
   @Patch(':raceId')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
@@ -95,6 +111,17 @@ export class RaceController {
     @Body() body: UpdateCategoryDto,
   ) {
     const category = await this.raceService.updateCategory(raceId, categoryId, body);
+    return { category };
+  }
+
+  @Delete(':raceId/categories/:categoryId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  async deleteCategory(
+    @Param('raceId') raceId: string,
+    @Param('categoryId') categoryId: string,
+  ) {
+    const category = await this.raceService.removeCategory(raceId, categoryId);
     return { category };
   }
 
