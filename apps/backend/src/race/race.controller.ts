@@ -18,6 +18,7 @@ import { UpdateCategoryDto } from './dto/update-category.dto';
 import { CreateParticipantDto } from './dto/create-participant.dto';
 import { UpdateParticipantDto } from './dto/update-participant.dto';
 import { UpdateRaceDto } from './dto/update-race.dto';
+import { UpdateParticipantIssueDto } from './dto/update-participant-issue.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -177,6 +178,22 @@ export class RaceController {
                 return date;
               })(),
       },
+    );
+    return { participant };
+  }
+
+  @Patch(':raceId/participants/:participantId/issue')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  async updateParticipantIssue(
+    @Param('raceId') raceId: string,
+    @Param('participantId') participantId: string,
+    @Body() body: UpdateParticipantIssueDto,
+  ) {
+    const participant = await this.raceService.setParticipantIssued(
+      raceId,
+      participantId,
+      body.isIssued,
     );
     return { participant };
   }

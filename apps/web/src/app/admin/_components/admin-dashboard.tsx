@@ -22,6 +22,7 @@ type Participant = {
   categoryId?: string;
   team?: string;
   birthDate?: number | null;
+  isBibIssued: boolean;
 };
 
 type ImportSummary = {
@@ -167,6 +168,8 @@ export default function AdminDashboard({ raceSlug }: AdminDashboardProps) {
     () => races.find((race) => race.id === activeRaceId) ?? null,
     [races, activeRaceId],
   );
+
+  const currentRace = activeRace ?? races[0] ?? null;
 
   useEffect(() => {
     const drafts: Record<string, RaceDraft> = {};
@@ -1276,6 +1279,13 @@ export default function AdminDashboard({ raceSlug }: AdminDashboardProps) {
                     >
                       Лидер
                     </Link>
+                    <Link
+                      className="rounded border border-slate-700 px-2 py-1 text-slate-300 transition hover:border-teal-400 hover:text-teал-200"
+                      href={`/admin/volunteers/${encodeURIComponent(pathSegment)}`}
+                      prefetch={false}
+                    >
+                      Выдача номеров
+                    </Link>
                   </div>
                 )}
 
@@ -1426,13 +1436,33 @@ export default function AdminDashboard({ raceSlug }: AdminDashboardProps) {
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-10">
         <header className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <div className="text-sm uppercase tracking-wide text-slate-500">
-                Админ-панель гонки
+            <div className="space-y-3">
+              <div>
+                <div className="text-sm uppercase tracking-wide text-slate-500">
+                  Админ-панель гонки
+                </div>
+                <h1 className="text-3xl font-semibold sm:text-4xl">
+                  Управляйте гонками, категориями и участниками
+                </h1>
               </div>
-              <h1 className="text-3xl font-semibold sm:text-4xl">
-                Управляйте гонками, категориями и участниками
-              </h1>
+              <nav className="flex flex-wrap gap-3 text-xs font-semibold uppercase tracking-wide text-slate-300">
+                <Link
+                  href={currentRace ? `/chrono/${encodeURIComponent(currentRace.slug ?? currentRace.id)}` : '#'}
+                  prefetch={false}
+                  className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 transition hover:border-teal-400 hover:text-teal-200 disabled:opacity-50"
+                  aria-disabled={!currentRace}
+                >
+                  Хронометраж
+                </Link>
+                <Link
+                  href={currentRace ? `/admin/volunteers/${encodeURIComponent(currentRace.slug ?? currentRace.id)}` : '#'}
+                  prefetch={false}
+                  className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 transition hover:border-teал-400 hover:text-teал-200 disabled:opacity-50"
+                  aria-disabled={!currentRace}
+                >
+                  Выдача номеров
+                </Link>
+              </nav>
             </div>
             <button
               type="button"
@@ -1861,6 +1891,7 @@ export default function AdminDashboard({ raceSlug }: AdminDashboardProps) {
                               </span>
                             </button>
                           </th>
+                          <th className="px-4 py-2 text-left">Номерок</th>
                           <th className="px-4 py-2 text-left">
                             <button
                               type="button"
@@ -1900,6 +1931,17 @@ export default function AdminDashboard({ raceSlug }: AdminDashboardProps) {
                             <td className="px-4 py-2 font-semibold text-slate-100">#{participant.bib}</td>
                             <td className="px-4 py-2 text-slate-300">{participant.name}</td>
                             <td className="px-4 py-2 text-slate-400">{participant.categoryName}</td>
+                            <td className="px-4 py-2">
+                              <span
+                                className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
+                                  participant.isBibIssued
+                                    ? 'border-teal-500/40 bg-teal-500/10 text-teal-200'
+                                    : 'border-slate-700 bg-slate-900 text-slate-400'
+                                }`}
+                              >
+                                {participant.isBibIssued ? 'Выдан' : 'Не выдан'}
+                              </span>
+                            </td>
                             <td className="px-4 py-2 text-slate-400">{formatBirthDate(participant.birthDate)}</td>
                         <td className="px-4 py-2 text-right">
                           <div className="flex justify-end gap-2">

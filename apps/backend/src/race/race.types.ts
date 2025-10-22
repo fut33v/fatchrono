@@ -12,6 +12,7 @@ export type Participant = {
   categoryId?: string;
   team?: string;
   birthDate?: number | null;
+  isBibIssued: boolean;
 };
 
 export type Rider = {

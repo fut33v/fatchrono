@@ -16,6 +16,7 @@ type AdminRace = {
   createdAt: number;
   categories: number;
   participants: number;
+  issued: number;
 };
 
 type ApiRace = {
@@ -27,7 +28,7 @@ type ApiRace = {
   startedAt: number | null;
   createdAt: number;
   categories: Array<{ id: string }>;
-  participants: Array<{ id: string }>;
+  participants: Array<{ id: string; isBibIssued?: boolean }>;
 };
 
 type RacesResponse = {
@@ -64,6 +65,7 @@ export default function AdminOverview() {
     totalLaps: 20,
     tapCooldownSeconds: 0,
   });
+  const [raceDeletingId, setRaceDeletingId] = useState<string | null>(null);
 
   const origin = useMemo(
     () => (typeof window !== "undefined" ? window.location.origin : ""),
@@ -129,6 +131,7 @@ export default function AdminOverview() {
         createdAt: race.createdAt,
         categories: race.categories.length,
         participants: race.participants.length,
+        issued: race.participants.filter((participant) => participant.isBibIssued).length,
       }));
       setRaces(normalized);
     } catch (err) {
@@ -164,6 +167,31 @@ export default function AdminOverview() {
       setError("Не удалось создать гонку");
     } finally {
       setIsCreatingRace(false);
+    }
+  }
+
+  async function handleDeleteRace(raceId: string) {
+    const race = races.find((item) => item.id === raceId);
+    if (!race) {
+      return;
+    }
+
+    if (!window.confirm(`Удалить гонку «${race.name}»? Действие необратимо.`)) {
+      return;
+    }
+
+    try {
+      setRaceDeletingId(raceId);
+      setFeedback(undefined);
+      setError(undefined);
+      await authFetch(`/race/${raceId}`, { method: "DELETE" });
+      setFeedback("Гонка удалена");
+      await fetchRaces();
+    } catch (err) {
+      console.error("Не удалось удалить гонку", err);
+      setError("Не удалось удалить гонку");
+    } finally {
+      setRaceDeletingId(null);
     }
   }
 
@@ -332,7 +360,7 @@ export default function AdminOverview() {
                               {race.name}
                             </h3>
                             <p className="text-sm text-slate-400">
-                              Кругов: {race.totalLaps} · Категорий: {race.categories} · Участников: {race.participants}
+                              Кругов: {race.totalLaps} · Категорий: {race.categories} · Участников: {race.participants} · Выдано: {race.issued}
                             </p>
                             <p className="text-xs uppercase tracking-wide text-slate-500">
                               Slug: {race.slug ? race.slug : "не задан"}
@@ -357,6 +385,16 @@ export default function AdminOverview() {
                           )}
                         </div>
                       </Link>
+                      <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteRace(race.id)}
+                          disabled={raceDeletingId === race.id}
+                          className="inline-flex items-center gap-1 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 font-semibold text-rose-200 transition hover:border-rose-400 hover:bg-rose-500/20 disabled:opacity-60"
+                        >
+                          {raceDeletingId === race.id ? "Удаляем…" : "Удалить"}
+                        </button>
+                      </div>
                     </li>
                   );
                 })}

@@ -35,6 +35,12 @@ export function SiteHeader() {
 
     if (user?.role === "admin") {
       navItems.push({
+        key: "volunteers",
+        href: `/admin/volunteers/${encodeURIComponent(racePathSegment)}`,
+        label: "Выдача номерков",
+        isActive: pathname.startsWith("/admin/volunteers/"),
+      });
+      navItems.push({
         key: "chrono",
         href: `/chrono/${encodeURIComponent(racePathSegment)}`,
         label: "Хронометраж",

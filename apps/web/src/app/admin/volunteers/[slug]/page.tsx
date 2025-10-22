@@ -1,17 +1,17 @@
 "use client";
 
 import { use } from "react";
-import AdminDashboard from "../../_components/admin-dashboard";
+import VolunteerDashboard from "../../_components/volunteer-dashboard";
 
-type RaceAdminPageProps = {
+type VolunteerPageProps = {
   params: Promise<{ slug: string }> | { slug: string };
 };
 
-export default function RaceAdminPage({ params }: RaceAdminPageProps) {
+export default function VolunteerPage({ params }: VolunteerPageProps) {
   const resolved =
     typeof (params as Promise<unknown>).then === "function"
       ? use(params as Promise<{ slug: string }>)
       : (params as { slug: string });
 
-  return <AdminDashboard raceSlug={resolved.slug} />;
+  return <VolunteerDashboard slug={resolved.slug} />;
 }

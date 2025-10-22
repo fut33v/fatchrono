@@ -1,8 +1,10 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import {
   Category,
@@ -56,6 +58,7 @@ type UpdateParticipantOptions = {
 
 @Injectable()
 export class RaceService {
+  private readonly logger = new Logger(RaceService.name);
   private readonly listeners = new Set<(event: RaceBroadcastEvent) => void>();
   private readonly raceModel: any;
 
@@ -71,8 +74,12 @@ export class RaceService {
         participants: { orderBy: { bib: 'asc' } },
       },
     });
+    const participantIds = races.flatMap((race) =>
+      race.participants.map((participant) => participant.id),
+    );
+    const issuedIds = await this.getIssuedParticipantIds(participantIds);
 
-    return races.map((race) => this.toRace(race));
+    return races.map((race) => this.toRace(race, issuedIds));
   }
 
   async getRaceById(raceId: string): Promise<Race> {
@@ -87,8 +94,11 @@ export class RaceService {
     if (!race) {
       throw new NotFoundException('Гонка не найдена');
     }
+    const issuedIds = await this.getIssuedParticipantIds(
+      race.participants.map((participant) => participant.id),
+    );
 
-    return this.toRace(race);
+    return this.toRace(race, issuedIds);
   }
 
   async getRaceBySlug(slug: string): Promise<Race> {
@@ -104,7 +114,11 @@ export class RaceService {
       throw new NotFoundException('Гонка не найдена');
     }
 
-    return this.toRace(race);
+    const issuedIds = await this.getIssuedParticipantIds(
+      race.participants.map((participant) => participant.id),
+    );
+
+    return this.toRace(race, issuedIds);
   }
 
   async getPublicRaceSummaries(): Promise<
@@ -243,7 +257,10 @@ export class RaceService {
     });
 
     await this.emitRaceUpdate(raceId);
-    return this.toRace(updated);
+    const issuedIds = await this.getIssuedParticipantIds(
+      updated.participants.map((participant) => participant.id),
+    );
+    return this.toRace(updated, issuedIds);
   }
 
   async getStateForRace(raceId: string): Promise<RaceStatePayload> {
@@ -263,10 +280,17 @@ export class RaceService {
       orderBy: { timestamp: 'desc' },
     });
 
+    const issuedIds = await this.getIssuedParticipantIds(
+      race.participants.map((participant) => participant.id),
+    );
+
     const categories = race.categories.map((category) =>
       this.toCategory(category),
     );
-    const riders: Rider[] = race.participants.map((participant) => ({
+    const issuedParticipants = race.participants.filter((participant) =>
+      issuedIds.has(participant.id),
+    );
+    const riders: Rider[] = issuedParticipants.map((participant) => ({
       bib: participant.bib,
       name: participant.name,
       categoryId: participant.categoryId ?? undefined,
@@ -498,7 +522,7 @@ export class RaceService {
       });
 
       await this.emitRaceUpdate(raceId);
-      return this.toParticipant(participant);
+      return this.toParticipant(participant, undefined, false);
     } catch (error) {
       if (this.isUniqueViolation(error)) {
         throw new BadRequestException('Участник с таким номером уже существует');
@@ -578,7 +602,72 @@ export class RaceService {
     });
 
     await this.emitRaceUpdate(raceId);
-    return this.toParticipant(updated);
+    const isIssued = await this.isParticipantIssued(participantId);
+    return this.toParticipant(updated, undefined, isIssued);
+  }
+
+  async setParticipantIssued(
+    raceId: string,
+    participantId: string,
+    isIssued: boolean,
+  ): Promise<Participant> {
+    const participant = await this.prisma.participant.findUnique({
+      where: { id: participantId },
+    });
+
+    if (!participant || participant.raceId !== raceId) {
+      throw new NotFoundException('Участник не найден');
+    }
+
+    const alreadyIssued = await this.isParticipantIssued(participantId);
+    if (alreadyIssued === isIssued) {
+      this.logger.debug(
+        `Bib status unchanged for participant ${participantId} (race ${raceId}), already ${alreadyIssued ? 'issued' : 'not issued'}.`,
+      );
+      return this.toParticipant(participant, undefined, alreadyIssued);
+    }
+
+    this.logger.debug(
+      `Updating bib status for participant ${participantId} in race ${raceId}: ${alreadyIssued ? 'issued -> not issued' : 'not issued -> issued'}.`,
+    );
+
+    await this.prisma.$transaction(async (tx) => {
+      if (isIssued) {
+        await tx.$executeRaw(
+          Prisma.sql`
+            INSERT INTO "ParticipantIssue" ("participantId")
+            VALUES (${participantId})
+            ON CONFLICT ("participantId") DO NOTHING
+          `,
+        );
+      } else {
+        await tx.tapEvent.deleteMany({ where: { raceId, participantId } });
+        await tx.$executeRaw(
+          Prisma.sql`
+            DELETE FROM "ParticipantIssue"
+            WHERE "participantId" = ${participantId}
+          `,
+        );
+      }
+
+      await tx.participant.update({
+        where: { id: participantId },
+        data: { updatedAt: new Date() },
+      });
+
+      await tx.race.update({
+        where: { id: raceId },
+        data: { updatedAt: new Date() },
+      });
+    });
+
+    const afterIssued = await this.isParticipantIssued(participantId);
+    this.logger.debug(
+      `Participant ${participantId} issue status after update: ${afterIssued}.`,
+    );
+
+    await this.emitRaceUpdate(raceId);
+    return this.toParticipant(participant, undefined, isIssued);
   }
 
   async removeParticipants(raceId: string, participantIds: string[]): Promise<{
@@ -619,7 +708,9 @@ export class RaceService {
     await this.emitRaceUpdate(raceId);
 
     return {
-      removed: participants.map((participant) => this.toParticipant(participant)),
+      removed: participants.map((participant) =>
+        this.toParticipant(participant, undefined, false),
+      ),
     };
   }
 
@@ -825,9 +916,17 @@ export class RaceService {
 
     await this.emitRaceUpdate(raceId);
 
+    const issuedForUpdated = await this.getIssuedParticipantIds(
+      result.updated.map((participant) => participant.id),
+    );
+
     return {
-      created: result.created.map((participant) => this.toParticipant(participant)),
-      updated: result.updated.map((participant) => this.toParticipant(participant)),
+      created: result.created.map((participant) =>
+        this.toParticipant(participant, undefined, false),
+      ),
+      updated: result.updated.map((participant) =>
+        this.toParticipant(participant, issuedForUpdated),
+      ),
       categoriesCreated: result.categoriesCreated.map((category) => this.toCategory(category)),
       skipped,
     };
@@ -848,6 +947,10 @@ export class RaceService {
     });
     if (!participant) {
       throw new NotFoundException('Гонщик с таким номером не найден');
+    }
+    const isIssued = await this.isParticipantIssued(participant.id);
+    if (!isIssued) {
+      throw new BadRequestException('Для этого гонщика номер ещё не выдан');
     }
 
     const eventRecord = await this.prisma.tapEvent.create({
@@ -1033,14 +1136,20 @@ export class RaceService {
     } satisfies Category;
   }
 
-  private toParticipant(participant: {
-    id: string;
-    bib: number;
-    name: string;
-    categoryId: string | null;
-    team: string | null;
-    birthDate: Date | null;
-  }): Participant {
+  private toParticipant(
+    participant: {
+      id: string;
+      bib: number;
+      name: string;
+      categoryId: string | null;
+      team: string | null;
+      birthDate: Date | null;
+    },
+    issuedIds?: Set<string>,
+    forced?: boolean,
+  ): Participant {
+    const isBibIssued =
+      forced ?? (issuedIds ? issuedIds.has(participant.id) : false);
     return {
       id: participant.id,
       bib: participant.bib,
@@ -1048,6 +1157,7 @@ export class RaceService {
       categoryId: participant.categoryId ?? undefined,
       team: participant.team ?? undefined,
       birthDate: participant.birthDate ? participant.birthDate.getTime() : null,
+      isBibIssued,
     } satisfies Participant;
   }
 
@@ -1071,7 +1181,8 @@ export class RaceService {
     } satisfies TapEvent;
   }
 
-  private toRace(race: {
+  private toRace(
+    race: {
     id: string;
     name: string;
     totalLaps: number;
@@ -1094,7 +1205,9 @@ export class RaceService {
       team: string | null;
       birthDate: Date | null;
     }[];
-  }): Race {
+  },
+    issuedIds?: Set<string>,
+  ): Race {
     const categories = [...race.categories].sort((a, b) => a.order - b.order);
     const participants = [...race.participants].sort((a, b) => a.bib - b.bib);
 
@@ -1109,9 +1222,38 @@ export class RaceService {
       startedAt: race.startedAt ? race.startedAt.getTime() : null,
       categories: categories.map((category) => this.toCategory(category)),
       participants: participants.map((participant) =>
-        this.toParticipant(participant),
+        this.toParticipant(participant, issuedIds),
       ),
     } satisfies Race;
+  }
+
+  private async getIssuedParticipantIds(participantIds: string[]): Promise<Set<string>> {
+    if (participantIds.length === 0) {
+      return new Set();
+    }
+
+    const rows = await this.prisma.$queryRaw<Array<{ participantId: string }>>(
+      Prisma.sql`
+        SELECT "participantId"
+        FROM "ParticipantIssue"
+        WHERE "participantId" IN (${Prisma.join(participantIds)})
+      `,
+    );
+
+    return new Set(rows.map((row) => row.participantId));
+  }
+
+  private async isParticipantIssued(participantId: string): Promise<boolean> {
+    const rows = await this.prisma.$queryRaw<Array<{ participantId: string }>>(
+      Prisma.sql`
+        SELECT "participantId"
+        FROM "ParticipantIssue"
+        WHERE "participantId" = ${participantId}
+        LIMIT 1
+      `,
+    );
+
+    return rows.length > 0;
   }
 
   private emitRaceUpdate = async (raceId: string) => {
