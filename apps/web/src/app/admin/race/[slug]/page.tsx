@@ -1,17 +1,22 @@
 "use client";
 
+import type { PageProps } from "next";
 import { use } from "react";
 import AdminDashboard from "../../_components/admin-dashboard";
 
-type RaceAdminPageProps = {
-  params: Promise<{ slug: string }> | { slug: string };
-};
+type RaceAdminPageProps = PageProps<{ slug: string }>;
 
 export default function RaceAdminPage({ params }: RaceAdminPageProps) {
-  const resolved =
-    typeof (params as Promise<unknown>).then === "function"
-      ? use(params as Promise<{ slug: string }>)
-      : (params as { slug: string });
+  if (!params) {
+    throw new Error("Race slug params are missing.");
+  }
 
-  return <AdminDashboard raceSlug={resolved.slug} />;
+  const paramsPromise: Promise<{ slug: string }> =
+    typeof (params as Promise<unknown>).then === "function"
+      ? (params as Promise<{ slug: string }>)
+      : Promise.resolve(params as { slug: string });
+
+  const { slug } = use(paramsPromise);
+
+  return <AdminDashboard raceSlug={slug} />;
 }
